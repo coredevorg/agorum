@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- ===================================================================== -->
+<!--                                                                       -->
+<!--  JBoss Server Configuration                                           -->
+<!--                                                                       -->
+<!-- ===================================================================== -->
+
+<!-- $Id: mysql-ds.xml,v 1.12 2004/02/24 08:43:32 cvs Exp $ -->
+<!-- ==================================================================== -->
+<!--  Datasource config for MySQL using 2.0.11 driver                     -->
+<!-- ==================================================================== -->
+
+
+<datasources>
+  <local-tx-datasource>
+    <jndi-name>DefaultDS</jndi-name>
+    <connection-url><![CDATA[jdbc:mysql://localhost:3306/roi?useUnicode=true&characterEncoding=UTF-8&useJDBCCompliantTimezoneShift=true&serverTimezone=CET]]></connection-url>
+    <driver-class>com.mysql.jdbc.Driver</driver-class>
+    <user-name>root</user-name>
+    <password><![CDATA[{{MYSQL_PASSWORD}}]]></password>
+		<check-valid-connection-sql>select 1</check-valid-connection-sql>
+
+    <!-- The minimum connections in a pool/sub-pool. Pools are lazily constructed on first use -->
+    <min-pool-size>5</min-pool-size>
+
+    <!-- The maximum connections in a pool/sub-pool -->
+    <max-pool-size>500</max-pool-size>
+  </local-tx-datasource>
+
+</datasources>
