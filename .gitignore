@@ -1,2 +1,5 @@
 secret/
 setup/
+docker/sources/*.zip
+docker/sources/*.jar
+docker/sources/*.bin

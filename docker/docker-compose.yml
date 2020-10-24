@@ -1,0 +1,10 @@
+version: '3.4'
+
+services:
+  agorum:
+    image: stretch-agorum
+    build: 
+      context: .
+      dockerfile: ./Dockerfile
+      args:
+        GITHUB_TOKEN: "XXX"

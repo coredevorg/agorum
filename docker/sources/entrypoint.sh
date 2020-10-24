@@ -3,9 +3,13 @@
 set -e # exit script on error
 
 [ -f /opt/agorum/data/.done ] || {
-    echo "initalize mounted data volume with data.install"
+    echo "initalize data volume with data.install"
     cp -r /opt/agorum/data.install/. /opt/agorum/data
-    chown -R mysql:mysql /opt/agorum/data/mysql/data
+    
+    # chown not working with vmhgfs mounts from VMware Fusion (?)
+    grep /opt/agorum/data /etc/mtab | grep -q vmhgfs-fuse || {
+        chown -R mysql:mysql /opt/agorum/data/mysql/data
+    }
 }
 
 [ -L /opt/agorum/agorumcore/mysql/data ] || {
@@ -25,8 +29,12 @@ set -e # exit script on error
     ln -s /opt/agorum/data/log/zookeeper.out /opt/agorum/agorumcore/zookeeper/zookeeper.out
 }
 
-# startup agorum core
 IP=$(ifconfig eth0 | grep inet | awk '{print $2}')
 echo "$IP   roihost" >> /etc/hosts
 echo "using network address $IP"
-/opt/agorum/agorumcore/scripts/agorumcore start
+export PATH="/opt/agorum/data/scripts:$PATH"
+
+[ "$1" ] && {
+    CMD="$1" ; shift
+    exec "$CMD" "$@"
+}

@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+/opt/agorum/agorumcore/scripts/agorumcore stop

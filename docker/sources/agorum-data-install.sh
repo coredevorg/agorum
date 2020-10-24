@@ -6,8 +6,9 @@ mkdir /opt/agorum/data.install/solr
 mkdir /opt/agorum/data.install/zookeeper
 mkdir /opt/agorum/data.install/jboss
 mkdir /opt/agorum/data.install/log
-mkdir /opt/agorum/data.install/scripts
+#mkdir /opt/agorum/data.install/scripts
 
+mv /opt/agorum/scripts /opt/agorum/data.install
 mv /opt/agorum/agorumcore/storage /opt/agorum/data.install
 mv /opt/agorum/agorumcore/mysql/data /opt/agorum/data.install/mysql
 mv /opt/agorum/agorumcore/solr/nodes /opt/agorum/data.install/solr
