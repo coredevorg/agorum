@@ -2,14 +2,25 @@
 # entrypoint.sh initialize data volume on first run 
 set -e # exit script on error
 
+# check arguments from run command and exec entry script
+[ "$1" ] && { CMD="$1" ; shift ; exec "$CMD" "$@" ; }
+
+function sigterm_handler() {
+    echo "Received SIGTERM"
+    /opt/agorum/agorumcore/scripts/agorumcore stop
+    exit 143
+}
+
 [ -f /opt/agorum/data/.done ] || {
     echo "initalize data volume with data.install"
     cp -r /opt/agorum/data.install/. /opt/agorum/data
-    
-    # chown not working with vmhgfs mounts from VMware Fusion (?)
-    grep /opt/agorum/data /etc/mtab | grep -q vmhgfs-fuse || {
+}
+
+# chown not working with vmhgfs mounts from VMware Fusion (?)
+grep /opt/agorum/data /etc/mtab | grep -q vmhgfs-fuse || {
+    [ "$( stat -c '%U' /opt/agorum/data/mysql/data )" == "mysql" ] || {
         chown -R mysql:mysql /opt/agorum/data/mysql/data
-    }
+    }   
 }
 
 [ -L /opt/agorum/agorumcore/mysql/data ] || {
@@ -32,9 +43,9 @@ set -e # exit script on error
 IP=$(ifconfig eth0 | grep inet | awk '{print $2}')
 echo "$IP   roihost" >> /etc/hosts
 echo "using network address $IP"
-export PATH="/opt/agorum/data/scripts:$PATH"
 
-[ "$1" ] && {
-    CMD="$1" ; shift
-    exec "$CMD" "$@"
-}
+# start agorumcore and wait for SIGTERM
+trap 'sigterm_handler' SIGTERM
+/opt/agorum/agorumcore/scripts/agorumcore start
+echo "waiting for container termination..."
+while true ; do tail -f /dev/null & wait ${!} ; done

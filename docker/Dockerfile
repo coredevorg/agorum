@@ -8,7 +8,8 @@ RUN mkdir -p /opt/agorum/scripts
 COPY sources/* /opt/agorum/
 COPY scripts/* /opt/agorum/scripts/
 WORKDIR /opt/agorum
-RUN chmod 700 *.sh && chmod 700 scripts/* && ./agorum-setup.sh && ./agorum-data-install.sh
+RUN chmod 700 *.sh && chmod 700 scripts/* && ./agorum-setup.sh && ./agorum-data-install.sh INIT && \
+    ln -s /opt/agorum/agorumcore/scripts/agorumcore /usr/local/bin 
 
 VOLUME /opt/agorum/data
 EXPOSE 80 443
