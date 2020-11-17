@@ -1,0 +1,161 @@
+#!/bin/bash
+# agorum helper script
+#
+# agorum mount agorum/private [username] [password]
+# agorum api [URL] asa "digitec core - AddOn" [username] [password] 
+#
+# set -x 
+
+
+PROG=$(basename $0)
+SCRIPT="$0"
+ARGS="$@"
+[ "$PROG" == "agorum" ] && CMD="$1" && shift || CMD=${PROG/agorum-/}
+
+# TODO: source settings from ~/.local/etc/agorum.cfg 
+
+DEFAULT_DMS="agorum/dms"
+DEFAULT_USERNAME="roi"
+DEFAULT_PASSWORD="agorum"
+DEFAULT_URL="http://agorum.home.local"
+
+MOUNT="${HOME}/Develop/agorum/mnt"
+VMROOT="${HOME}/Develop/agorum/vm"
+LINK="${HOME}/Desktop"
+TMP=$HOME/tmp
+
+function login() {
+
+    local username=${1:-$DEFAULT_USERNAME}
+    local password=${2:-$DEFAULT_PASSWORD}
+	local path="api/rest/session"
+	local cookies="$HOME/tmp/agorum.cookies"
+	unset AGORUM_sessionId AGORUM_JSESSIONID
+
+	result=$(curl -s -c $cookies \
+				  -H "Content-Type: application/x-www-form-urlencoded" \
+	              -H "Accept: application/json" \
+				  -d "username=${username}&password=${password}" \
+				  "$URL/$path")
+
+	[ $(echo $result | jq .success) == true ] || { 
+		echo $result | jq -r .message 1>&2 
+		rm $cookies
+		exit 1;
+	}
+	AGORUM_sessionId=$(echo $result | jq -r .sessionId)
+	AGORUM_JSESSIONID=$(grep JSESSIONID $cookies | awk '{print $7}')
+	rm $cookies
+}
+
+function logout() {
+	
+	local sessionId="$AGORUM_sessionId"
+	[ "$1" ] && sessionId="$1"
+	local path="api/rest/session"
+
+	result=$(curl -s -X DELETE \
+				  -H "Content-Type: application/x-www-form-urlencoded" \
+	              -H "Accept: application/json" \
+				  -d "sessionId=$sessionId" \
+				  "$URL/$path")
+
+	[ $(echo $result | jq .success) == true ] || { 
+		echo $result | jq -r .message 1>&2 
+		rm $cookies
+		exit 1;
+	}
+	unset AGORUM_sessionId AGORUM_JSESSIONID
+}
+
+
+case "$CMD" in
+
+mount|umount)   # agorum mount [agorum/dms] [roi] [agorum] 
+                dms=${1:-$DEFAULT_DMS}
+                username=${2:-$DEFAULT_USERNAME}
+                password=${3:-$DEFAULT_PASSWORD}
+                set -- ${dms//\// }
+                host="$1"
+                dms="$2"
+                mount="${MOUNT}/${host}/${dms}"
+                link="$host [$dms]"
+
+				# TODO: create functions mount() and umount()
+
+                case "$CMD" in
+
+                mount)  [ -d "$mount" ] || mkdir -p "$mount"
+						mount | grep -q "$mount" || {
+                        	mount -t smbfs cifs://${username}:${password}@${host}/${dms} "$mount"
+                        	[ -f "${LINK}/${link}" ] || { sleep 3 ; mkalias $mount $LINK "$link"; }
+						}
+                        ;;
+						
+                umount) mount | grep -q "$mount" && {
+							[ -f "${LINK}/${link}" ] && rm "${LINK}/${link}"
+							umount -f "$mount"
+						}
+                        ;;
+                esac
+                ;;
+
+api)            # command line interface to agorum REST api
+				case "$1" in
+				http*) URL="$1" ; shift ;;
+				*) URL="$DEFAULT_URL" ; SUBCMD="$1" ; shift ;;
+				esac
+				case "$SUBCMD" in
+				login) 	# just login and set JSESSIONID cookie
+						login "$1" "$2"
+						echo "export AGORUM_sessionId=$AGORUM_sessionId"
+						echo "export AGORUM_JSESSIONID=$AGORUM_JSESSIONID"
+						;;
+				logout)	logout "$1"
+						;;
+				asa)	profile="$1" ; shift
+						path="api/rest/faconfigdesigner/export"
+						[ "$AGORUM_JSESSIONID" ] || login "$1" "$2"
+						curl -b "JSESSIONID=$AGORUM_JSESSIONID" \
+						  	 -o "$profile.zip" \
+							 -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' \
+							 -H 'Accept-Encoding: gzip, deflate' \
+							 "$URL/$path/${profile// /%20}"
+						;;
+				esac
+				;;
+
+vm)				# start/stop agorum vms
+				SUBCMD="$1" ; shift ; VM="$1" ; shift
+				VMX="${VMROOT}/${VM}.vmwarevm/${VM}.vmx"
+
+				# TODO: create functions vm-start() and vm-stop()
+
+				case "$SUBCMD" in
+
+				start)	vmrun list | grep -q $VMX || {
+							echo "starting [$VM] ..."
+							STAMP=$(date '+%Y-%m-%d_%H%M%S')
+							echo "creating snapshop [$STAMP]"
+							vmrun snapshot "$VMX" "$STAMP" 
+							vmrun start "$VMX" nogui
+							echo "waiting for host ..."
+							until ping -c1 -t1 -W1 $VM >/dev/null 2>&1; do :; done
+							ssh root@$VM "/opt/agorum/agorumcore/scripts/agorumcore start"
+							# mount agorum
+						}
+						;;
+
+				stop)	vmrun list | grep -q $VMX && {
+							# umount agorum
+							ssh root@$VM "/opt/agorum/agorumcore/scripts/agorumcore stop"
+							vmrun stop "$VMX"
+						}
+						;;
+
+				esac
+				;;
+
+# TODO: start/stop agorum environment 
+
+esac

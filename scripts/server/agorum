@@ -1,0 +1,18 @@
+#!/bin/bash
+# move to /usr/local/sbin on agorum server
+
+INSTALL=/opt/agorum/agorumcore
+SERVER=$INSTALL/jboss/server/default
+
+case "$1" in
+	stop)	$INSTALL/scripts/agorumcore stop
+			;;
+	start)	$INSTALL/scripts/agorumcore start
+			;;
+	log)	exec tail -f $SERVER/log/server.log
+			;;
+	root|server|default) ( cd $SERVER && exec bash )
+			;;
+esac
+
+
