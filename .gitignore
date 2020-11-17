@@ -1,5 +1,10 @@
+.DS_Store
+mnt/
 secret/
 setup/
+vm/
+code/
+source/
 docker/sources/*.zip
 docker/sources/*.jar
 docker/sources/*.bin
