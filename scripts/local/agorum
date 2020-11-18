@@ -219,8 +219,8 @@ shutdown)		# agorum [cfg] shutdown
 				;;
 
 status)			# agorum status [cfg]
-				vmrun list
-				mount | grep cifs
+				vmrun list | grep $VM
+				mount | grep $DMS
 				;;
 
 esac
