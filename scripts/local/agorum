@@ -64,8 +64,7 @@ function login() {
 
 function logout() {
 	
-	local sessionId="$AGORUM_sessionId"
-	[ "$1" ] && sessionId="$1"
+	local sessionId=${1:-"$AGORUM_sessionId"}
 	local path="api/rest/session"
 
 	result=$(curl -s -X DELETE \
