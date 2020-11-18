@@ -94,14 +94,15 @@ function vm-start() {
 		echo "creating snapshop [$stamp]"
 		vmrun snapshot "$vmx" "$stamp" || exit 
 		vmrun start "$vmx" nogui || exit
-		echo "waiting for host ..."
+		echo -n "waiting for host ."
 		until ping -c1 -t1 -W1 $host >/dev/null 2>&1
 		do
+			echo -n "."
 			let counter++
-			[ $counter -gt 30 ] && exit
+			[ $counter -gt 60 ] && exit
 		done
+		echo ""
 		ssh root@$host "/opt/agorum/agorumcore/scripts/agorumcore start"
-		# mount agorum
 	}
 }
 
