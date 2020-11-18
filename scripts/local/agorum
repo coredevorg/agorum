@@ -1,33 +1,47 @@
 #!/bin/bash
 # agorum helper script
 #
-# agorum mount agorum/private [username] [password]
+# agorum [config] mount [DMS] [username] [password]
+# agorum [config] vm start|stop [VM] [HOST]
+# agorum [config] startup|shutdown
 # agorum api [URL] asa "digitec core - AddOn" [username] [password] 
 #
-# set -x 
-
+# set -x
+#
+# TODO: implement (sub-)command specific --help
+#
 
 PROG=$(basename $0)
 SCRIPT="$0"
 ARGS="$@"
+CFGROOT="$HOME/.local/etc"
+
+# set parms from agorum[-config].cfg
+if [ -f "$CFGROOT/agorum-${1}.cfg" ]
+then
+	source "$CFGROOT/agorum-$1.cfg"
+	shift
+else
+	DMS=${DMS:-"agorum/private"}
+	SHARE=${SHARE:-"private"}
+	VM=${VM:-"agorum"}
+	USERNAME=${USERNAME:-"roi"}
+	PASSWORD=${PASSWORD:-"agorum"}
+	HOST=${HOST:-"agorum"}
+	MOUNT=${MOUNT:-"$HOME/Develop/agorum/mnt"}
+	VMROOT=${VMROOT:-"$HOME/Develop/agorum/vm"}
+	LINKROOT=${LINKROOT:-"$HOME/Desktop"}
+	TMP=${TMP:-$HOME/tmp}
+	CFG=$CFGROOT/agorum.cfg
+	[ -f "$CFG" ] && source "$CFG"
+fi
+
 [ "$PROG" == "agorum" ] && CMD="$1" && shift || CMD=${PROG/agorum-/}
-
-# TODO: source settings from ~/.local/etc/agorum.cfg 
-
-DEFAULT_DMS="agorum/dms"
-DEFAULT_USERNAME="roi"
-DEFAULT_PASSWORD="agorum"
-DEFAULT_URL="http://agorum.home.local"
-
-MOUNT="${HOME}/Develop/agorum/mnt"
-VMROOT="${HOME}/Develop/agorum/vm"
-LINK="${HOME}/Desktop"
-TMP=$HOME/tmp
 
 function login() {
 
-    local username=${1:-$DEFAULT_USERNAME}
-    local password=${2:-$DEFAULT_PASSWORD}
+    local username=${1:-$USERNAME}
+    local password=${2:-$PASSWORD}
 	local path="api/rest/session"
 	local cookies="$HOME/tmp/agorum.cookies"
 	unset AGORUM_sessionId AGORUM_JSESSIONID
@@ -68,42 +82,99 @@ function logout() {
 	unset AGORUM_sessionId AGORUM_JSESSIONID
 }
 
+function vm-start() {
+
+	VM="$VM" ; [ "$1" ] && VM="$1"
+	HOST="$HOST" ; [ "$2" ] && HOST="$2"
+	VMX="${VMROOT}/${VM}.vmwarevm/${VM}.vmx"
+
+	vmrun list | grep -q $VMX || {
+		echo "starting [$VM] ..."
+		STAMP=$(date '+%Y-%m-%d_%H%M%S')
+		echo "creating snapshop [$STAMP]"
+		vmrun snapshot "$VMX" "$STAMP" || exit 
+		vmrun start "$VMX" nogui || exit
+		echo "waiting for host ..."
+		let counter=0
+		until ping -c1 -t1 -W1 $HOST >/dev/null 2>&1
+		do
+			let counter++
+			[ $counter -gt 30 ] && exit
+		done
+		ssh root@$HOST "/opt/agorum/agorumcore/scripts/agorumcore start"
+		# mount agorum
+	}
+}
+
+function vm-stop() {
+
+	VM="$VM" ; [ "$1" ] && VM="$1"
+	HOST="$HOST" ; [ "$2" ] && HOST="$2"
+	VMX="${VMROOT}/${VM}.vmwarevm/${VM}.vmx"
+
+	vmrun list | grep -q $VMX && {
+		# umount agorum
+		ssh root@$HOST "/opt/agorum/agorumcore/scripts/agorumcore stop"
+		vmrun stop "$VMX"
+	}
+}
+
+# agorum mount [agorum/dms] [roi] [agorum] 
+function cifs-mount() {
+
+	dms=${1:-$DMS}
+	username=${2:-$USERNAME}
+	password=${3:-$PASSWORD}
+	set -- ${dms//\// }
+	host="$1"
+	dms="$2"
+	mount="${MOUNT}/${host}/${dms}"
+	link="$host [$dms]"
+
+	[ -d "$mount" ] || mkdir -p "$mount"
+	mount | grep -q "$mount" || {
+		mount -t smbfs cifs://${username}:${password}@${host}/${dms} "$mount"
+		[ -f "${LINKROOT}/${link}" ] || { sleep 3 ; mkalias $mount $LINKROOT "$link"; }
+	}
+}
+
+function cifs-umount() {
+
+	dms=${1:-$DMS}
+	username=${2:-$USERNAME}
+	password=${3:-$PASSWORD}
+	set -- ${dms//\// }
+	host="$1"
+	dms="$2"
+	mount="${MOUNT}/${host}/${dms}"
+	link="$host [$dms]"
+
+	mount | grep -q "$mount" && {
+		[ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
+		umount -f "$mount"
+	}
+}
 
 case "$CMD" in
 
-mount|umount)   # agorum mount [agorum/dms] [roi] [agorum] 
-                dms=${1:-$DEFAULT_DMS}
-                username=${2:-$DEFAULT_USERNAME}
-                password=${3:-$DEFAULT_PASSWORD}
-                set -- ${dms//\// }
-                host="$1"
-                dms="$2"
-                mount="${MOUNT}/${host}/${dms}"
-                link="$host [$dms]"
+mount)			cifs-mount "$@"
+				;;
 
-				# TODO: create functions mount() and umount()
+umount)			cifs-umount "$@"
+				;;
 
-                case "$CMD" in
-
-                mount)  [ -d "$mount" ] || mkdir -p "$mount"
-						mount | grep -q "$mount" || {
-                        	mount -t smbfs cifs://${username}:${password}@${host}/${dms} "$mount"
-                        	[ -f "${LINK}/${link}" ] || { sleep 3 ; mkalias $mount $LINK "$link"; }
-						}
-                        ;;
-						
-                umount) mount | grep -q "$mount" && {
-							[ -f "${LINK}/${link}" ] && rm "${LINK}/${link}"
-							umount -f "$mount"
-						}
-                        ;;
-                esac
-                ;;
+vm)				# start/stop agorum vms
+				SUBCMD="$1" ; shift
+				case "$SUBCMD" in
+				start)	vm-start "$@" ;;
+				stop)	vm-stop "$@"  ;;
+				esac
+				;;
 
 api)            # command line interface to agorum REST api
 				case "$1" in
 				http*) URL="$1" ; shift ;;
-				*) URL="$DEFAULT_URL" ; SUBCMD="$1" ; shift ;;
+				*) URL="http://$HOST" ; SUBCMD="$1" ; shift ;;
 				esac
 				case "$SUBCMD" in
 				login) 	# just login and set JSESSIONID cookie
@@ -125,37 +196,31 @@ api)            # command line interface to agorum REST api
 				esac
 				;;
 
-vm)				# start/stop agorum vms
-				SUBCMD="$1" ; shift ; VM="$1" ; shift
-				VMX="${VMROOT}/${VM}.vmwarevm/${VM}.vmx"
+startup)		# agorum [cfg] startup
+				vm-start
+        		cifs-mount
 
-				# TODO: create functions vm-start() and vm-stop()
-
-				case "$SUBCMD" in
-
-				start)	vmrun list | grep -q $VMX || {
-							echo "starting [$VM] ..."
-							STAMP=$(date '+%Y-%m-%d_%H%M%S')
-							echo "creating snapshop [$STAMP]"
-							vmrun snapshot "$VMX" "$STAMP" 
-							vmrun start "$VMX" nogui
-							echo "waiting for host ..."
-							until ping -c1 -t1 -W1 $VM >/dev/null 2>&1; do :; done
-							ssh root@$VM "/opt/agorum/agorumcore/scripts/agorumcore start"
-							# mount agorum
-						}
-						;;
-
-				stop)	vmrun list | grep -q $VMX && {
-							# umount agorum
-							ssh root@$VM "/opt/agorum/agorumcore/scripts/agorumcore stop"
-							vmrun stop "$VMX"
-						}
-						;;
-
-				esac
+				private=$(mount | grep $MOUNT | sed 's/.* on \(.*\) (.*/\1/')
+				[ -d "$private/$DEVELOP" ] && [ -d "$WORKDIR" ] && {
+					cd "$WORKDIR"	
+					ln -sf "$private/$DEVELOP" .
+					export GIT_DIR="$(pwd)/.git"
+					vc -n cdev.core 
+				} 
 				;;
 
-# TODO: start/stop agorum environment 
+shutdown)		# agorum [cfg] shutdown
+				cd "$WORKDIR" && {
+					project=$(basename $DEVELOP)
+					[ -L "$project" ] && unlink "$project"
+				}
+        		cifs-umount 
+        		vm-stop
+				;;
+
+status)			# agorum status [cfg]
+				vmrun list
+				mount | grep cifs
+				;;
 
 esac
