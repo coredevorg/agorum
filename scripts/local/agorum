@@ -84,52 +84,51 @@ function logout() {
 
 function vm-start() {
 
-	VM="$VM" ; [ "$1" ] && VM="$1"
-	HOST="$HOST" ; [ "$2" ] && HOST="$2"
-	VMX="${VMROOT}/${VM}.vmwarevm/${VM}.vmx"
+	local vm=${1:-$VM}
+	local host=${2:-$HOST}
+	local vmx="${VMROOT}/$vm.vmwarevm/$vm.vmx"
+	local counter=0 stamp=$(date '+%Y-%m-%d_%H%M%S')
 
-	vmrun list | grep -q $VMX || {
-		echo "starting [$VM] ..."
-		STAMP=$(date '+%Y-%m-%d_%H%M%S')
-		echo "creating snapshop [$STAMP]"
-		vmrun snapshot "$VMX" "$STAMP" || exit 
-		vmrun start "$VMX" nogui || exit
+	vmrun list | grep -q $vmx || {
+		echo "starting [$vm] ..."
+		echo "creating snapshop [$stamp]"
+		vmrun snapshot "$vmx" "$stamp" || exit 
+		vmrun start "$vmx" nogui || exit
 		echo "waiting for host ..."
-		let counter=0
-		until ping -c1 -t1 -W1 $HOST >/dev/null 2>&1
+		until ping -c1 -t1 -W1 $host >/dev/null 2>&1
 		do
 			let counter++
 			[ $counter -gt 30 ] && exit
 		done
-		ssh root@$HOST "/opt/agorum/agorumcore/scripts/agorumcore start"
+		ssh root@$host "/opt/agorum/agorumcore/scripts/agorumcore start"
 		# mount agorum
 	}
 }
 
 function vm-stop() {
 
-	VM="$VM" ; [ "$1" ] && VM="$1"
-	HOST="$HOST" ; [ "$2" ] && HOST="$2"
-	VMX="${VMROOT}/${VM}.vmwarevm/${VM}.vmx"
+	local vm=${1:-$VM} 
+	local host=${2:-$HOST}
+	local vmx="${VMROOT}/$vm.vmwarevm/$vm.vmx"
 
-	vmrun list | grep -q $VMX && {
+	vmrun list | grep -q $vmx && {
 		# umount agorum
-		ssh root@$HOST "/opt/agorum/agorumcore/scripts/agorumcore stop"
-		vmrun stop "$VMX"
+		ssh root@$host "/opt/agorum/agorumcore/scripts/agorumcore stop"
+		vmrun stop "$vmx"
 	}
 }
 
 # agorum mount [agorum/dms] [roi] [agorum] 
 function cifs-mount() {
 
-	dms=${1:-$DMS}
-	username=${2:-$USERNAME}
-	password=${3:-$PASSWORD}
+	local dms=${1:-$DMS}
+	local username=${2:-$USERNAME}
+	local password=${3:-$PASSWORD}
 	set -- ${dms//\// }
-	host="$1"
+	local host="$1"
 	dms="$2"
-	mount="${MOUNT}/${host}/${dms}"
-	link="$host [$dms]"
+	local mount="${MOUNT}/${host}/${dms}"
+	local link="$host [$dms]"
 
 	[ -d "$mount" ] || mkdir -p "$mount"
 	mount | grep -q "$mount" || {
@@ -140,14 +139,14 @@ function cifs-mount() {
 
 function cifs-umount() {
 
-	dms=${1:-$DMS}
-	username=${2:-$USERNAME}
-	password=${3:-$PASSWORD}
+	local dms=${1:-$DMS}
+	local username=${2:-$USERNAME}
+	local password=${3:-$PASSWORD}
 	set -- ${dms//\// }
-	host="$1"
+	local host="$1"
 	dms="$2"
-	mount="${MOUNT}/${host}/${dms}"
-	link="$host [$dms]"
+	local mount="${MOUNT}/${host}/${dms}"
+	local link="$host [$dms]"
 
 	mount | grep -q "$mount" && {
 		[ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
