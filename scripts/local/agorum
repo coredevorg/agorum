@@ -6,7 +6,7 @@
 # agorum [config] startup|shutdown
 # agorum api [URL] asa "digitec core - AddOn" [username] [password] 
 #
-# set -x
+set -x
 #
 # TODO: implement (sub-)command specific --help
 #
@@ -16,10 +16,110 @@ SCRIPT="$0"
 ARGS="$@"
 CFGROOT="$HOME/.local/etc"
 
+function need_help() {
+
+	while [ $# -gt 0 ]
+	do
+		case "$1" in
+		help|--help|-h|-?) return 0;;
+		esac
+		shift
+	done
+	return 1
+}
+
+# check help and display help
+function help() {
+
+	local topic="$1" ; shift
+	local func="$1"  ; shift
+	local args="$@"
+
+	[ "$topic" == "agorum" ] && {
+
+cat <<EOF
+
+usage: agorum [config] command [options]
+
+       where [config] is read from $CFGROOT/agorum-[config].cfg
+       for one of the the following commands:
+
+       vm start|stop             virtual machine
+       mount|umount              agorum share
+       startup|shutdown|status   agorum development context
+
+EOF
+	exit
+	}
+
+if need_help $args
+then
+	
+
+case "$topic" in
+mount) cat <<EOF
+
+usage: agorum [config] mount [dms] [username] [password]
+
+       config   $CFGFILE
+       dms      ${1:-$DMS}
+       username ${2:-$USERNAME} 
+       password ***
+
+EOF
+;;
+umount) cat <<EOF
+
+usage: agorum [config] umount [dms]
+
+       config   $CFGFILE
+       dms      ${1:-$DMS}
+
+EOF
+;;
+
+vm*) cat <<EOF
+
+usage: agorum [config] vm start|stop [vm] [host]
+
+       config   $CFGFILE
+       vm       ${1:-$VM} [$VMROOT/${1:-$VM}.vmwarevm/${1:-$VM}.vmx]
+       host     ${2:-$HOST}
+
+EOF
+;;
+
+startup|shutdown) cat <<EOF
+
+usage: agorum [config] startup|shutdown [vm] [host] [share] [develop] [workdir]
+
+       config   $CFGFILE
+       vm       ${1:-$VM} [$VMROOT/${1:-$VM}.vmwarevm/${1:-$VM}.vmx]
+       host     ${2:-$HOST}
+       share    ${3:-$SHARE}
+       develop  ${4:-$DEVELOP}
+       workdir  ${5:-$WORKDIR}
+
+EOF
+;;
+
+*) cat <<EOF
+No help avalaible for topic [$topic]
+EOF
+;;
+esac 
+exit 0
+else
+	# forward call to internal function with args
+	[ "$func" ] && [ "$func" != "--" ] && $func $args
+fi
+}
+
 # set parms from agorum[-config].cfg
 if [ -f "$CFGROOT/agorum-${1}.cfg" ]
 then
-	source "$CFGROOT/agorum-$1.cfg"
+	CFGFILE="$CFGROOT/agorum-$1.cfg"
+	source "$CFGFILE"
 	shift
 else
 	DMS=${DMS:-"agorum/private"}
@@ -32,8 +132,8 @@ else
 	VMROOT=${VMROOT:-"$HOME/Develop/agorum/vm"}
 	LINKROOT=${LINKROOT:-"$HOME/Desktop"}
 	TMP=${TMP:-$HOME/tmp}
-	CFG=$CFGROOT/agorum.cfg
-	[ -f "$CFG" ] && source "$CFG"
+	CFGFILE=$CFGROOT/agorum.cfg
+	[ -f "$CFGFILE" ] && source "$CFGFILE" || CFGFILE=
 fi
 
 [ "$PROG" == "agorum" ] && CMD="$1" && shift || CMD=${PROG/agorum-/}
@@ -140,8 +240,8 @@ function cifs-mount() {
 function cifs-umount() {
 
 	local dms=${1:-$DMS}
-	local username=${2:-$USERNAME}
-	local password=${3:-$PASSWORD}
+	# local username=${2:-$USERNAME}
+	# local password=${3:-$PASSWORD}
 	set -- ${dms//\// }
 	local host="$1"
 	dms="$2"
@@ -156,17 +256,21 @@ function cifs-umount() {
 
 case "$CMD" in
 
-mount)			cifs-mount "$@"
+help|--help|-h|-?) help agorum
 				;;
 
-umount)			cifs-umount "$@"
+mount)			help mount cifs-mount "$@"
+				;;
+
+umount)			help umount cifs-umount "$@"
 				;;
 
 vm)				# start/stop agorum vms
 				SUBCMD="$1" ; shift
 				case "$SUBCMD" in
-				start)	vm-start "$@" ;;
-				stop)	vm-stop "$@"  ;;
+				start)	help vm vm-start "$@" ;;
+				stop)	help vm vm-stop "$@"  ;;
+				*)		help vm -- --help     ;;
 				esac
 				;;
 
@@ -195,8 +299,11 @@ api)            # command line interface to agorum REST api
 				esac
 				;;
 
-startup)		# agorum [cfg] startup
-				vm-start
+startup)		# agorum [cfg] startup vm host share develop workdir 
+				help startup -- "$@"
+
+				echo "Continue ..." && exit
+				vm-start 
         		cifs-mount
 
 				private=$(mount | grep $MOUNT | sed 's/.* on \(.*\) (.*/\1/')
@@ -208,7 +315,9 @@ startup)		# agorum [cfg] startup
 				} 
 				;;
 
-shutdown)		# agorum [cfg] shutdown
+shutdown)		# agorum [cfg] shutdown vm host share develop workdir
+				help shutdown -- "$@"
+
 				cd "$WORKDIR" && {
 					project=$(basename $DEVELOP)
 					[ -L "$project" ] && unlink "$project"
