@@ -18,14 +18,18 @@ CFGROOT="$HOME/.local/etc"
 
 function need_help() {
 
-	while [ $# -gt 0 ]
+	local ifs="$1" ; shift
+	local err=1 new=
+    while [ $# -gt 0 ]
 	do
 		case "$1" in
-		help|--help|-h|-?) return 0;;
+		help|--help|-h|-\?|\?) err=0 ;;
+        *) [ "$new" ] && new="${new}${ifs}$1" || new="$1" ;;
 		esac
 		shift
 	done
-	return 1
+    echo "$new"
+	return $err
 }
 
 # check help and display help
@@ -34,6 +38,9 @@ function help() {
 	local topic="$1" ; shift
 	local func="$1"  ; shift
 	local args="$@"
+	local ifs_args=
+	local _ifs="$IFS" # save original IFS
+	local _ifs_="|"   # temp IFS to process quoted args
 
 	[ "$topic" == "agorum" ] && {
 
@@ -52,9 +59,12 @@ EOF
 	exit
 	}
 
-if need_help $args
+
+if ifs_args=$(need_help "$_ifs_" "$@")
 then
 	
+# reset args with stripped help options
+IFS="$_ifs_" && set -- $ifs_args && IFS="$_ifs"
 
 case "$topic" in
 mount) cat <<EOF
@@ -111,7 +121,7 @@ esac
 exit 0
 else
 	# forward call to internal function with args
-	[ "$func" ] && [ "$func" != "--" ] && $func $args
+	[ "$func" ] && [ "$func" != "--" ] && $func "$@"
 fi
 }
 
@@ -256,7 +266,7 @@ function cifs-umount() {
 
 case "$CMD" in
 
-help|--help|-h|-?) help agorum
+help|--help|-h|-\?|\?) help agorum
 				;;
 
 mount)			help mount cifs-mount "$@"
