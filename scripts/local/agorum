@@ -16,6 +16,7 @@ SCRIPT="$0"
 ARGS="$@"
 CFGROOT="$HOME/.local/etc"
 TERMINAL="open -a iTerm.app"
+IDECMD="code -n"
 
 function need_help() {
 
@@ -321,7 +322,7 @@ startup)		# agorum [cfg] startup vm host share develop workdir
 					cd "$WORKDIR"	
 					ln -sf "$private/$DEVELOP" .
 					export GIT_DIR="$(pwd)/.git"
-					vc -n cdev.core 
+					$IDECMD -n cdev.core 
 				} 
 				;;
 
