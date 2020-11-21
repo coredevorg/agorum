@@ -115,6 +115,24 @@ usage: agorum [config] startup|shutdown [vm] [host] [share] [develop] [workdir]
 EOF
 ;;
 
+cd) cat <<EOF
+
+usage: agorum [config] cd [directory]
+
+       open terminal at one of the
+       following directories
+
+       workdir   $WORKDIR
+       develop   $WORKDIR/.. 
+       core      $_MOUNT/$DEVELOP 
+       customers $_MOUNT/Administration/customers 
+       mount     $_MOUNT
+       share     $_MOUNT 
+       private   $_MOUNT 
+
+EOF
+;;
+
 *) cat <<EOF
 No help avalaible for topic [$topic]
 EOF
@@ -358,18 +376,18 @@ current environment
 EOF
 ;;
 
-cd)				# help cd -- "$@"
-				
-				_MOUNT=$(mount | grep "$MOUNT" | sed 's/.* on \(.*\) (.*/\1/')
+cd)				_MOUNT=$(mount | grep "$DMS" | sed 's/.* on \(.*\) (.*/\1/')
+				help cd -- "$@"
 
 				case "$1" in
-				workdir) 	_DIR="$WORKDIR" ;;
-				develop) 	_DIR="$_MOUNT/$DEVELOP" ;;
-				customers) 	_DIR="$_MOUNT/Administration/customers" ;;
+				work*) 		_DIR="$WORKDIR" ;;
+				dev*)		_DIR="$WORKDIR/.." ;;
+				core) 		_DIR="$_MOUNT/$DEVELOP"	;;
+				custom*) 	_DIR="$_MOUNT/Administration/customers" ;;
 				mount) 		_DIR="$_MOUNT" ;;
 				share) 		_DIR="$_MOUNT" ;;
 				private) 	_DIR="$_MOUNT" ;;
-				*) 			_DIR="$HOME" ;;
+				*) 			_DIR="$HOME"   ;;
 				esac
 				
 				$TERMINAL "$_DIR"
