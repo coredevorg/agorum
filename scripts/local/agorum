@@ -393,4 +393,13 @@ cd)				_MOUNT=$(mount | grep "$DMS" | sed 's/.* on \(.*\) (.*/\1/')
 				$TERMINAL "$_DIR"
 				;;
 
+query)			# help query -- "$@"
+				find . -type f \( -iname "*_config.json" ! -iname ".*" \) -print0 | \
+				xargs -0 -I{} sh -c "echo '{}' && jq $1 '{}' | egrep -v '({|})' | sed 's/\"//g' ; echo"
+				;;
+find)			# help find -- "$@"
+				;;
+
+
+
 esac
