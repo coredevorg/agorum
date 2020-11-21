@@ -6,7 +6,7 @@
 # agorum [config] startup|shutdown
 # agorum api [URL] asa "digitec core - AddOn" [username] [password] 
 #
-set -x
+# set -x
 #
 # TODO: implement (sub-)command specific --help
 #
@@ -312,7 +312,6 @@ api)            # command line interface to agorum REST api
 startup)		# agorum [cfg] startup vm host share develop workdir 
 				help startup -- "$@"
 
-				echo "Continue ..." && exit
 				vm-start 
         		cifs-mount
 
@@ -336,9 +335,25 @@ shutdown)		# agorum [cfg] shutdown vm host share develop workdir
         		vm-stop
 				;;
 
-status)			# agorum status [cfg]
-				vmrun list | grep $VM
-				mount | grep $DMS
-				;;
+status)			# agorum [cfg] status
+				_VMX=$(vmrun list | grep $VM)
+				[ "$_VMX" ] && _MOUNT=$(mount | grep $DMS)
+
+cat <<EOF
+
+current environment
+
+    machine  ${_VMX:-"not running"}
+    mount    ${_MOUNT:-"not available"}
+
+    config   $CFGFILE
+    vm       ${1:-$VM} [$VMROOT/${1:-$VM}.vmwarevm/${1:-$VM}.vmx]
+    host     ${2:-$HOST}
+    share    ${3:-$SHARE}
+    develop  ${4:-$DEVELOP}
+    workdir  ${5:-$WORKDIR}
+
+EOF
+;;
 
 esac
