@@ -15,6 +15,7 @@ PROG=$(basename $0)
 SCRIPT="$0"
 ARGS="$@"
 CFGROOT="$HOME/.local/etc"
+TERMINAL="open -a iTerm.app"
 
 function need_help() {
 
@@ -355,5 +356,22 @@ current environment
 
 EOF
 ;;
+
+cd)				# help cd -- "$@"
+				
+				_MOUNT=$(mount | grep "$MOUNT" | sed 's/.* on \(.*\) (.*/\1/')
+
+				case "$1" in
+				workdir) 	_DIR="$WORKDIR" ;;
+				develop) 	_DIR="$_MOUNT/$DEVELOP" ;;
+				customers) 	_DIR="$_MOUNT/Administration/customers" ;;
+				mount) 		_DIR="$_MOUNT" ;;
+				share) 		_DIR="$_MOUNT" ;;
+				private) 	_DIR="$_MOUNT" ;;
+				*) 			_DIR="$HOME" ;;
+				esac
+				
+				$TERMINAL "$_DIR"
+				;;
 
 esac
