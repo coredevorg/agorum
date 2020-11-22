@@ -27,8 +27,23 @@ case "$1" in
 				;;
 	_query)		fname="$2"
 				expr="${3:-.selectors}"
+				filter="$4"
+				check=$(jq "$expr" "$fname")
+				# key found and non empty value?
+				[ "$check" == "{}" -o "$check" == "null" ] && exit 0
+				# suppress empty "Default": selectors
+				[ "$expr" == ".selectors" ] && {
+					keys=$(echo $check | jq 'keys | length')
+					[ $keys -eq 1 ] && [ "$(echo $check | jq -r .Default)" == "" ] && exit 0 
+				}
+				[ "$filter" ] &&  {
+					opts="-qi"
+					# check negation of filter expression
+					[ "$filter" != "${filter/! //}" ] && { opts="$opts -v" ; filter="${filter/! /}" ; }
+					echo "$check" | egrep -v '({|})' | sed 's/\"//g' | egrep $opts "$filter" || exit 0
+				}
 				echo "${fname/.\//}"
-				jq "$expr" "$fname" | egrep -v '({|})' | sed 's/\"//g'
+				echo "$check" | egrep -v '({|})' | sed 's/\"//g'
 				echo
 				exit 0
 				;;
@@ -450,7 +465,7 @@ cd)				_MOUNT=$(mount | grep "$DMS" | sed 's/.* on \(.*\) (.*/\1/')
 
 query)			help query -- "$@"
 				find . -type f \( -iname "*_config.json" ! -iname ".*" \) -print0 | \
-				xargs -0 -I{} $SCRIPT _query "{}" "$1"
+				xargs -0 -I{} $SCRIPT _query "{}" "$@"
 				# xargs -0 -I{} sh -c "echo '{}' && jq $1 '{}' | egrep -v '({|})' | sed 's/\"//g' ; echo"
 				;;
 
