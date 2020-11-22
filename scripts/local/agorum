@@ -18,6 +18,31 @@ CFGROOT="$HOME/.local/etc"
 TERMINAL="open -a iTerm.app"
 IDECMD="code -n"
 
+# external helpers called by xargs
+case "$1" in
+
+	_display)	fname="$2"
+				echo "${fname/.\//}"
+				exit 0
+				;;
+	_query)		fname="$2"
+				expr="${3:-.selectors}"
+				echo "${fname/.\//}"
+				jq "$expr" "$fname" | egrep -v '({|})' | sed 's/\"//g'
+				echo
+				exit 0
+				;;
+	_find)		fname="$2"
+				expr="$3"
+				egrep -q "$expr" "$fname" && {
+					echo "${fname/.\//}"
+					egrep "$expr" "$fname"
+					echo	
+				}
+				exit 0
+				;;
+esac
+
 function need_help() {
 
 	local ifs="$1" ; shift
@@ -56,6 +81,8 @@ usage: agorum [config] command [options]
        vm start|stop             virtual machine
        mount|umount              agorum share
        startup|shutdown|status   agorum development context
+       query expression          search expression in .json
+       find  expression          search expression in .js
 
 EOF
 	exit
@@ -129,6 +156,34 @@ usage: agorum [config] cd [directory]
        mount     $_MOUNT
        share     $_MOUNT 
        private   $_MOUNT 
+
+EOF
+;;
+
+query) cat <<EOF
+
+usage: agorum query expression
+
+       search for jq expression in json files
+       of the current directory tree
+       [$(pwd)]
+
+       example: agorum query ".selectors"
+       to list asa selectors
+
+EOF
+;;
+
+find) cat <<EOF
+
+usage: agorum find expression
+
+       search for regular expression in js files
+       of the current directory tree
+       [$(pwd)]
+
+       example: agorum find "\.query\("
+       to list objects.query() expressions
 
 EOF
 ;;
@@ -393,13 +448,16 @@ cd)				_MOUNT=$(mount | grep "$DMS" | sed 's/.* on \(.*\) (.*/\1/')
 				$TERMINAL "$_DIR"
 				;;
 
-query)			# help query -- "$@"
+query)			help query -- "$@"
 				find . -type f \( -iname "*_config.json" ! -iname ".*" \) -print0 | \
-				xargs -0 -I{} sh -c "echo '{}' && jq $1 '{}' | egrep -v '({|})' | sed 's/\"//g' ; echo"
-				;;
-find)			# help find -- "$@"
+				xargs -0 -I{} $SCRIPT _query "{}" "$1"
+				# xargs -0 -I{} sh -c "echo '{}' && jq $1 '{}' | egrep -v '({|})' | sed 's/\"//g' ; echo"
 				;;
 
+find)			help find -- "$@"
+				find . -type f \( -iname "*.js" ! -iname ".*" \) -print0 | \
+				xargs -0 -I{} $SCRIPT _find "{}" "$1"
+				;;
 
 
 esac
