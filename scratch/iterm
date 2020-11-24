@@ -1,0 +1,9 @@
+#!/usr/bin/osascript
+on run argv
+	tell application "iTerm"
+		set newWindow to (create window with default profile)
+		tell current session of newWindow
+			write text ( item 1 of argv )
+		end tell
+	end tell
+end run
