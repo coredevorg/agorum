@@ -15,8 +15,14 @@ PROG=$(basename $0)
 SCRIPT="$0"
 ARGS="$@"
 CFGROOT="$HOME/.local/etc"
-TERMINAL="open -a iTerm.app"
 IDECMD="code -n"
+
+function realpath() { ( cd "$1" && pwd -P ) ; }
+REALPATH="$(readlink $SCRIPT)" || REALPATH="$SCRIPT"
+REALDIR="$(realpath "$(dirname "$REALPATH")")"
+
+# TERMINAL="open -a iTerm.app"
+TERMINAL="$REALDIR/iterm.applescript"
 
 # external helpers called by xargs
 case "$1" in
@@ -98,6 +104,8 @@ usage: agorum [config] command [options]
        startup|shutdown|status   agorum development context
        query expression          search expression in .json
        find  expression          search expression in .js
+       cd                        open terminal at location
+       ssh                       open agorum remote terminal
 
 EOF
 	exit
@@ -165,7 +173,7 @@ usage: agorum [config] cd [directory]
        following directories
 
        workdir   $WORKDIR
-       develop   $WORKDIR/.. 
+       develop   $(realpath "$WORKDIR/..") 
        core      $_MOUNT/$DEVELOP 
        customers $_MOUNT/Administration/customers 
        mount     $_MOUNT
@@ -332,6 +340,7 @@ function cifs-mount() {
 
 	[ -d "$mount" ] || mkdir -p "$mount"
 	mount | grep -q "$mount" || {
+		[ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
 		mount -t smbfs cifs://${username}:${password}@${host}/${dms} "$mount"
 		[ -f "${LINKROOT}/${link}" ] || { sleep 3 ; mkalias $mount $LINKROOT "$link"; }
 	}
@@ -351,6 +360,9 @@ function cifs-umount() {
 	mount | grep -q "$mount" && {
 		[ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
 		umount -f "$mount"
+	}
+	mount | grep -q "$mount" || {
+		[ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
 	}
 }
 
@@ -451,7 +463,7 @@ cd)				_MOUNT=$(mount | grep "$DMS" | sed 's/.* on \(.*\) (.*/\1/')
 
 				case "$1" in
 				work*) 		_DIR="$WORKDIR" ;;
-				dev*)		_DIR="$WORKDIR/.." ;;
+				dev*)		_DIR="$(realpath "$WORKDIR/..")" ;;
 				core) 		_DIR="$_MOUNT/$DEVELOP"	;;
 				custom*) 	_DIR="$_MOUNT/Administration/customers" ;;
 				mount) 		_DIR="$_MOUNT" ;;
@@ -460,7 +472,12 @@ cd)				_MOUNT=$(mount | grep "$DMS" | sed 's/.* on \(.*\) (.*/\1/')
 				*) 			_DIR="$HOME"   ;;
 				esac
 				
-				$TERMINAL "$_DIR"
+				[ "$2" ] && _DIR="$_DIR/$2"
+				[ -d "$_DIR" ] || {
+					echo "invalid directory [$_DIR]"
+					exit 1
+				}
+				$TERMINAL "Default" "cd $_DIR"
 				;;
 
 query)			help query -- "$@"
@@ -474,5 +491,8 @@ find)			help find -- "$@"
 				xargs -0 -I{} $SCRIPT _find "{}" "$1"
 				;;
 
+ssh)			# help ssh -- "$@"
+				$TERMINAL "Default" "ssh root@$HOST"
+				;;
 
 esac
