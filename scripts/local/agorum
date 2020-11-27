@@ -7,6 +7,7 @@
 # agorum api [URL] asa "digitec core - AddOn" [username] [password] 
 #
 # set -x
+# DRYRUN="echo"
 #
 # TODO: implement (sub-)command specific --help
 #
@@ -23,6 +24,17 @@ REALDIR="$(realpath "$(dirname "$REALPATH")")"
 
 # TERMINAL="open -a iTerm.app"
 TERMINAL="$REALDIR/iterm.applescript"
+
+# set (global) bash options OPT_o and OPT_o_ARG 
+function checkopts() {
+    local opts="$1" prefix="$2" opt; shift 2
+    while getopts $opts opt
+    do
+        eval ${prefix}_${opt}=true
+        eval ${prefix}_${opt}_ARG="${OPTARG}"
+    done
+    return $((OPTIND-1))
+}
 
 # external helpers called by xargs
 case "$1" in
@@ -142,11 +154,15 @@ EOF
 
 vm*) cat <<EOF
 
-usage: agorum [config] vm start|stop [vm] [host]
+usage: agorum [config] vm start|stop [-s] [-a] [vm] [host]
 
        config   $CFGFILE
-       vm       ${1:-$VM} [$VMROOT/${1:-$VM}.vmwarevm/${1:-$VM}.vmx]
+       vm       ${1:-$VM} [$VM_AGORUM_ROOT/${1:-$VM}.vmwarevm/${1:-$VM}.vmx]
        host     ${2:-$HOST}
+
+       additional start options
+       -s create snapsnot before starting the virtual machine
+       -a run agorumcored after startring the virtual machine
 
 EOF
 ;;
@@ -156,7 +172,7 @@ startup|shutdown) cat <<EOF
 usage: agorum [config] startup|shutdown [vm] [host] [share] [develop] [workdir]
 
        config   $CFGFILE
-       vm       ${1:-$VM} [$VMROOT/${1:-$VM}.vmwarevm/${1:-$VM}.vmx]
+       vm       ${1:-$VM} [$VM_AGORUM_ROOT/${1:-$VM}.vmwarevm/${1:-$VM}.vmx]
        host     ${2:-$HOST}
        share    ${3:-$SHARE}
        develop  ${4:-$DEVELOP}
@@ -237,12 +253,15 @@ else
 	PASSWORD=${PASSWORD:-"agorum"}
 	HOST=${HOST:-"agorum"}
 	MOUNT=${MOUNT:-"$HOME/Develop/agorum/mnt"}
-	VMROOT=${VMROOT:-"$HOME/Develop/agorum/vm"}
+	VM_AGORUM_ROOT=${VM_AGORUM_ROOT:-"$HOME/Develop/agorum/vm"}
 	LINKROOT=${LINKROOT:-"$HOME/Desktop"}
 	TMP=${TMP:-$HOME/tmp}
 	CFGFILE=$CFGROOT/agorum.cfg
 	[ -f "$CFGFILE" ] && source "$CFGFILE" || CFGFILE=
 fi
+
+VM_START_OPT_a=${VM_AGORUM_START:-""}
+VM_START_OPT_b=${VM_AGORUM_SNAPSHOT:-""}
 
 [ "$PROG" == "agorum" ] && CMD="$1" && shift || CMD=${PROG/agorum-/}
 
@@ -293,14 +312,16 @@ function vm-start() {
 
 	local vm=${1:-$VM}
 	local host=${2:-$HOST}
-	local vmx="${VMROOT}/$vm.vmwarevm/$vm.vmx"
+	local vmx="${VM_AGORUM_ROOT}/$vm.vmwarevm/$vm.vmx"
 	local counter=0 stamp=$(date '+%Y-%m-%d_%H%M%S')
 
 	vmrun list | grep -q $vmx || {
 		echo "starting [$vm] ..."
-		echo "creating snapshop [$stamp]"
-		vmrun snapshot "$vmx" "$stamp" || exit 
-		vmrun start "$vmx" nogui || exit
+		[ "$VM_START_OPT_s" == "true" ] && {
+			echo "creating snapshop [$stamp]"
+			$DRYRUN vmrun snapshot "$vmx" "$stamp" || exit 
+		}
+		$DRYRUN vmrun start "$vmx" nogui || exit
 		echo -n "waiting for host ."
 		until ping -c1 -t1 -W1 $host >/dev/null 2>&1
 		do
@@ -309,7 +330,9 @@ function vm-start() {
 			[ $counter -gt 60 ] && exit
 		done
 		echo ""
-		ssh root@$host "/opt/agorum/agorumcore/scripts/agorumcore start"
+		[ "$VM_START_OPT_a" == "true" ] && {
+			$DRYRUN ssh root@$host "/opt/agorum/agorumcore/scripts/agorumcore start"
+		}
 	}
 }
 
@@ -317,7 +340,7 @@ function vm-stop() {
 
 	local vm=${1:-$VM} 
 	local host=${2:-$HOST}
-	local vmx="${VMROOT}/$vm.vmwarevm/$vm.vmx"
+	local vmx="${VM_AGORUM_ROOT}/$vm.vmwarevm/$vm.vmx"
 
 	vmrun list | grep -q $vmx && {
 		# umount agorum
@@ -380,7 +403,9 @@ umount)			help umount cifs-umount "$@"
 vm)				# start/stop agorum vms
 				SUBCMD="$1" ; shift
 				case "$SUBCMD" in
-				start)	help vm vm-start "$@" ;;
+				start)	checkopts "as" "VM_START_OPT" "$@" ; shift $?
+						help vm vm-start "$@"
+						;;
 				stop)	help vm vm-stop "$@"  ;;
 				*)		help vm -- --help     ;;
 				esac
@@ -449,7 +474,7 @@ current environment
     mount    ${_MOUNT:-"not available"}
 
     config   $CFGFILE
-    vm       ${1:-$VM} [$VMROOT/${1:-$VM}.vmwarevm/${1:-$VM}.vmx]
+    vm       ${1:-$VM} [$VM_AGORUM_ROOT/${1:-$VM}.vmwarevm/${1:-$VM}.vmx]
     host     ${2:-$HOST}
     share    ${3:-$SHARE}
     develop  ${4:-$DEVELOP}
