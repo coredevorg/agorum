@@ -1,11 +1,13 @@
 #!/bin/bash
 set -e
+# REV="9_5_0_3-1455"
+REV="9_5_1_4-2876"
 echo "check agorum setup files"
 [ "$1"] && GH_TOKEN="$1"
 [ "$GH_TOKEN" ] || { echo "missing github token" ; exit 1 ; }
 GH_OWNER="coredevorg"
 GH_REPO="download"
-GH_RELEASE_TAG="agorum-9_5_0_3-1455"
+GH_RELEASE_TAG="agorum-$REV"
 GH_RELEASE_URL="https://api.github.com/repos/$GH_OWNER/$GH_REPO/releases"
 GH_AUTH="Authorization: token $GH_TOKEN"
 GH_ACCEPT="Accept: application/octet-stream"
@@ -18,7 +20,7 @@ do
         curl -sLJO -H "$GH_AUTH" -H "$GH_ACCEPT" "$GH_RELEASE_URL/assets/$id"
     }
 done
-[ -f setup-agorum-core-server-linux-pro-9_5_0_3-1455.bin ] || { echo "missing agorum setup" ; exit 2 ; }
+[ -f setup-agorum-core-server-linux-pro-$REV.bin ] || { echo "missing agorum setup" ; exit 2 ; }
 [ -f agorumcoreocr-linux.zip ] || { echo "missing agorum ocr" ; exit 3 ; }
 sed -i "s/{{ROI_PASSWORD}}/${ROI_PASSWORD}/"     install_config.properties
 sed -i "s/{{MYSQL_PASSWORD}}/${MYSQL_PASSWORD}/" install_config.properties
