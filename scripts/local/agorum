@@ -379,14 +379,17 @@ function cifs-umount() {
 	dms="$2"
 	local mount="${MOUNT}/${host}/${dms}"
 	local link="$host [$dms]"
+	local ret=0
 
 	mount | grep -q "$mount" && {
 		[ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
 		umount -f "$mount"
+		ret=$?
 	}
 	mount | grep -q "$mount" || {
 		[ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
 	}
+	return $ret
 }
 
 case "$CMD" in
