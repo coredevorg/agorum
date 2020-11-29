@@ -331,7 +331,7 @@ function vm-start() {
 		done
 		echo ""
 		[ "$VM_START_OPT_a" == "true" ] && {
-			$DRYRUN ssh root@$host "/opt/agorum/agorumcore/scripts/agorumcore start"
+			$DRYRUN ssh root@$host "agorum start"
 		}
 	}
 }
@@ -344,7 +344,7 @@ function vm-stop() {
 
 	vmrun list | grep -q $vmx && {
 		# umount agorum
-		ssh root@$host "/opt/agorum/agorumcore/scripts/agorumcore stop"
+		ssh root@$host "agorun stop"
 		vmrun stop "$vmx"
 	}
 }
@@ -442,7 +442,8 @@ api)            # command line interface to agorum REST api
 startup)		# agorum [cfg] startup vm host share develop workdir 
 				help startup -- "$@"
 
-				vm-start 
+				vm-start
+				ssh root@$host "agorum start"
         		cifs-mount
 
 				private=$(mount | grep $MOUNT | sed 's/.* on \(.*\) (.*/\1/')
