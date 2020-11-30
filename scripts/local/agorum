@@ -367,6 +367,8 @@ function cifs-mount() {
 		mount -t smbfs cifs://${username}:${password}@${host}/${dms} "$mount"
 		[ -f "${LINKROOT}/${link}" ] || { sleep 3 ; mkalias $mount $LINKROOT "$link"; }
 	}
+	# check and set error level
+	mount | grep -q "$mount"
 }
 
 function cifs-umount() {
@@ -384,12 +386,13 @@ function cifs-umount() {
 	mount | grep -q "$mount" && {
 		[ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
 		umount -f "$mount"
-		ret=$?
+		# ret=$?
 	}
 	mount | grep -q "$mount" || {
 		[ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
 	}
-	return $ret
+	# return $ret
+	mount | grep -q -v "$mount"
 }
 
 case "$CMD" in
@@ -443,7 +446,7 @@ startup)		# agorum [cfg] startup vm host share develop workdir
 				help startup -- "$@"
 
 				vm-start
-				ssh root@$host "agorum start"
+				ssh root@$HOST "agorum start"
         		cifs-mount
 
 				private=$(mount | grep $MOUNT | sed 's/.* on \(.*\) (.*/\1/')
