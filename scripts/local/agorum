@@ -363,7 +363,7 @@ function vm-stop() {
 
 	vmrun list | grep -q $vmx && {
 		# umount agorum
-		ssh root@$host "agorun stop"
+		ssh root@$host "agorum stop"
 		vmrun stop "$vmx"
 	}
 }
