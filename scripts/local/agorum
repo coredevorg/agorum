@@ -278,7 +278,7 @@ else
 fi
 
 VM_START_OPT_a=${VM_AGORUM_START:-""}
-VM_START_OPT_b=${VM_AGORUM_SNAPSHOT:-""}
+VM_START_OPT_s=${VM_AGORUM_SNAPSHOT:-""}
 
 [ "$PROG" == "agorum" ] && CMD="$1" && shift || CMD=${PROG/agorum-/}
 
@@ -327,6 +327,8 @@ function logout() {
 
 function vm-start() {
 
+	checkopts "as" "VM_START_OPT" "$@" ; shift $?
+	
 	local vm=${1:-$VM}
 	local host=${2:-$HOST}
 	local vmx="${VM_AGORUM_ROOT}/$vm.vmwarevm/$vm.vmx"
