@@ -153,7 +153,8 @@ usage: agorum [config] umount [dms]
 EOF
 ;;
 
-vm*) cat <<EOF
+vm*) checkopts "as" "VM_START_OPT" "$@" ; shift $? 
+cat <<EOF
 
 usage: agorum [config] vm start|stop [-s] [-a] [vm] [host]
 
@@ -169,7 +170,6 @@ EOF
 ;;
 
 develop) checkopts "i" "DEV_OPTS" "$@" ; shift $?
-
 cat <<EOF
 
 usage agorum [cfg] develop [-i] [workdir] [project]
@@ -426,8 +426,9 @@ umount)			help umount cifs-umount "$@"
 vm)				# start/stop agorum vms
 				SUBCMD="$1" ; shift
 				case "$SUBCMD" in
-				start)	checkopts "as" "VM_START_OPT" "$@" ; shift $?
+				start)	# startup virtual machine
 						help vm vm-start "$@"
+						checkopts "as" "VM_START_OPT" "$@" ; shift $?
 						;;
 				stop)	help vm vm-stop "$@"  ;;
 				*)		help vm -- --help     ;;
