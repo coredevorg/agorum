@@ -1,7 +1,7 @@
 #!/bin/bash
 INSTALL=/opt/agorum/agorumcore
 SERVER=$INSTALL/jboss/server/default
-JOBS=$(ps -fa | grep agorumcore | wc -l)
+JOBS=$(ps -efa | grep agorumcore | wc -l)
 [ $JOBS -gt 1 ] && RUNNING=true
 
 case "$1" in
