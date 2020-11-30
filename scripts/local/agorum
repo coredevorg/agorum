@@ -114,6 +114,7 @@ usage: agorum [config] command [options]
        vm start|stop             virtual machine
        mount|umount              agorum share
        startup|shutdown|status   agorum development context
+       develop                   agorum development project
        query expression          search expression in .json
        find  expression          search expression in .js
        cd                        open terminal at location
@@ -166,6 +167,22 @@ usage: agorum [config] vm start|stop [-s] [-a] [vm] [host]
 
 EOF
 ;;
+
+develop) checkopts "i" "DEV_OPTS" "$@" ; shift $?
+
+cat <<EOF
+
+usage agorum [cfg] develop [-i] [workdir] [project]
+
+       config   $CFGFILE
+       workdir  ${1:-$WORKDIR}
+       project  ${2:-$PROJECT}
+
+       use option -i to initalize new development project
+
+EOF
+;;
+
 
 startup|shutdown) cat <<EOF
 
@@ -440,6 +457,29 @@ api)            # command line interface to agorum REST api
 							 "$URL/$path/${profile// /%20}"
 						;;
 				esac
+				;;
+
+develop)		# agorum [cfg] develop [-i] [WORKDIR] [PROJECT]
+				# WORKDIR: ~/Develop/agorum/develop/<project>
+				# PROJECT: [MOUNT] / [Administration/customers/]<project>
+
+				help develop -- "$@"
+
+				checkopts "i" "DEV_OPTS" "$@" ; shift $?
+				[ "$DEV_OPTS_i" ] && {
+					# initailize development project
+					mkdir -p "$WORKDIR" && cd "$WORKDIR" 
+					# TODO: project link, git init, ...
+				}
+
+				cd "$WORKDIR" && cd $(basename "$PROJECT") && [ -d ".git" ] && {
+					GIT_WORKTREE=$( git config --local --list | grep "core.worktree" | cut -d'=' -f2 )					
+					[ -d "$GIT_WORKTREE" ] && {
+						ln -sf "$GIT_WORKTREE" .
+						export GIT_DIR="$(pwd)/.git"
+						$IDECMD -n $( basename "$GIT_WORKTREE" )
+					}
+				}
 				;;
 
 startup)		# agorum [cfg] startup vm host share develop workdir 
