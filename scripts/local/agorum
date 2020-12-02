@@ -114,7 +114,8 @@ usage: agorum [config] command [options]
        vm start|stop             virtual machine
        mount|umount              agorum share
        startup|shutdown|status   agorum development context
-       develop                   agorum development project
+       project                   agorum customer project
+       develop                   agorum develop environment
        query expression          search expression in .json
        find  expression          search expression in .js
        cd                        open terminal at location
@@ -169,10 +170,10 @@ usage: agorum [config] vm start|stop [-s] [-a] [vm] [host]
 EOF
 ;;
 
-develop) checkopts "i" "DEV_OPTS" "$@" ; shift $?
+project) checkopts "i" "DEV_OPTS" "$@" ; shift $?
 cat <<EOF
 
-usage agorum [cfg] develop [-i] [workdir] [project]
+usage agorum [cfg] project [-i] [workdir] [project]
 
        config   $CFGFILE
        workdir  ${1:-$WORKDIR}
@@ -183,16 +184,25 @@ usage agorum [cfg] develop [-i] [workdir] [project]
 EOF
 ;;
 
+develop) cat <<EOF
+
+usage agorum [cfg] develop
+
+       config   $CFGFILE
+       develop  $(realpath "$WORKDIR/..")
+
+EOF
+;;
 
 startup|shutdown) cat <<EOF
 
-usage: agorum [config] startup|shutdown [vm] [host] [share] [develop] [workdir]
+usage: agorum [config] startup|shutdown [vm] [host] [share] [project] [workdir]
 
        config   $CFGFILE
        vm       ${1:-$VM} [$VM_AGORUM_ROOT/${1:-$VM}.vmwarevm/${1:-$VM}.vmx]
        host     ${2:-$HOST}
        share    ${3:-$SHARE}
-       develop  ${4:-$DEVELOP}
+       project  ${4:-$PROJECT}
        workdir  ${5:-$WORKDIR}
 
 EOF
@@ -462,11 +472,11 @@ api)            # command line interface to agorum REST api
 				esac
 				;;
 
-develop)		# agorum [cfg] develop [-i] [WORKDIR] [PROJECT]
+project)		# agorum [cfg] project [-i] [WORKDIR] [PROJECT]
 				# WORKDIR: ~/Develop/agorum/develop/<project>
 				# PROJECT: [MOUNT] / [Administration/customers/]<project>
 
-				help develop -- "$@"
+				help project -- "$@"
 
 				checkopts "i" "DEV_OPTS" "$@" ; shift $?
 				[ "$DEV_OPTS_i" ] && {
@@ -485,7 +495,12 @@ develop)		# agorum [cfg] develop [-i] [WORKDIR] [PROJECT]
 				}
 				;;
 
-startup)		# agorum [cfg] startup vm host share develop workdir 
+develop)		# agorum [cfg] develop
+				help develop -- "$@"
+				$IDECMD -n "$(realpath "$WORKDIR/..")"
+				;;
+
+startup)		# agorum [cfg] startup vm host share project workdir 
 				help startup -- "$@"
 
 				vm-start
@@ -493,19 +508,19 @@ startup)		# agorum [cfg] startup vm host share develop workdir
         		cifs-mount
 
 				private=$(mount | grep $MOUNT | sed 's/.* on \(.*\) (.*/\1/')
-				[ -d "$private/$DEVELOP" ] && [ -d "$WORKDIR" ] && {
+				[ -d "$private/$PROJECT" ] && [ -d "$WORKDIR" ] && {
 					cd "$WORKDIR"	
-					ln -sf "$private/$DEVELOP" .
+					ln -sf "$private/$PROJECT" .
 					export GIT_DIR="$(pwd)/.git"
 					$IDECMD -n cdev.core 
 				} 
 				;;
 
-shutdown)		# agorum [cfg] shutdown vm host share develop workdir
+shutdown)		# agorum [cfg] shutdown vm host share project workdir
 				help shutdown -- "$@"
 
 				cd "$WORKDIR" && {
-					project=$(basename $DEVELOP)
+					project=$(basename $PROJECT)
 					[ -L "$project" ] && unlink "$project"
 				}
         		cifs-umount 
