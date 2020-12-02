@@ -21,6 +21,7 @@ IDECMD="code -n"
 function realpath() { ( cd "$1" && pwd -P ) ; }
 REALPATH="$(readlink $SCRIPT)" || REALPATH="$SCRIPT"
 REALDIR="$(realpath "$(dirname "$REALPATH")")"
+DEVROOT=$(realpath "$REALDIR/../..")
 
 # TERMINAL="open -a iTerm.app"
 TERMINAL="$REALDIR/iterm.applescript"
@@ -189,7 +190,7 @@ develop) cat <<EOF
 usage agorum [cfg] develop
 
        config   $CFGFILE
-       develop  $(realpath "$WORKDIR/..")
+       develop  $DEVROOT
 
 EOF
 ;;
@@ -216,7 +217,7 @@ usage: agorum [config] cd [directory]
        following directories
 
        workdir   $WORKDIR
-       develop   $(realpath "$WORKDIR/..") 
+       develop   $DEVROOT
        core      $_MOUNT/$DEVELOP 
        customers $_MOUNT/Administration/customers 
        mount     $_MOUNT
@@ -497,7 +498,7 @@ project)		# agorum [cfg] project [-i] [WORKDIR] [PROJECT]
 
 develop)		# agorum [cfg] develop
 				help develop -- "$@"
-				$IDECMD -n "$(realpath "$WORKDIR/..")"
+				$IDECMD -n "$DEVROOT"
 				;;
 
 startup)		# agorum [cfg] startup vm host share project workdir 
