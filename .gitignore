@@ -3,7 +3,7 @@ mnt/
 secret/
 setup/
 vm/
-code/
+develop/
 source/
 docker/sources/*.zip
 docker/sources/*.jar
