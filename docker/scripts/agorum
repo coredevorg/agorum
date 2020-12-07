@@ -15,6 +15,10 @@ case "$1" in
             echo "$status"
             exit $ret
             ;;
-    root|server|default) ( cd $SERVER && exec bash )
+    root|server|default)
+            cd $SERVER && exec bash
+            ;;
+    messages)
+            cd /opt/agorum/agorumcore/jboss/server/default/deploy/roi.ear/roiwebui.war/WEB-INF/config/messages && exec bash
             ;;
 esac
