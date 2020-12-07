@@ -6,11 +6,11 @@
 # agorum [config] startup|shutdown
 # agorum api [URL] asa "digitec core - AddOn" [username] [password] 
 #
-# set -x
-# DRYRUN="echo"
-#
-# TODO: implement (sub-)command specific --help
-#
+
+[ "$AGORUM_DEBUG" ] && {
+	set -x
+	DRYRUN="echo"
+}
 
 PROG=$(basename $0)
 SCRIPT="$0"
@@ -285,6 +285,10 @@ else
 	LINKROOT=${LINKROOT:-"$HOME/Desktop"}
 	TMP=${TMP:-$HOME/tmp}
 	CFGFILE=$CFGROOT/agorum.cfg
+	DOCKER_IMAGE=agorum
+	DOCKER_NETWORK=office
+	DOCKER_DATA=/opt/agorum/data
+	DOCKER_MOUNT=/mnt/sda1/data
 	[ -f "$CFGFILE" ] && source "$CFGFILE" || CFGFILE=
 fi
 
@@ -586,5 +590,48 @@ find)			help find -- "$@"
 ssh)			# help ssh -- "$@"
 				$TERMINAL "Default" "ssh root@$HOST"
 				;;
+
+start)			# agorum [config] start [options] container [cmd]
+				# help start -- "$@"
+				container=${1:-agorum}
+				opts="-d"
+				state=$(docker inspect $container 2>/dev/null | jq -r .[0].State.Status)
+				case "$state" in
+				running) echo "Container [$container] already running!"
+						 ;;
+				exited)  echo "Starting existing container ..."
+						 docker start $container
+						 ;;
+				*)       echo "Creating new container [$container] from image [$DOCKER_IMAGE] ..." 
+						 docker run --network=$DOCKER_NETWORK --name=$container -v $DOCKER_MOUNT/$container:$DOCKER_DATA $opts $DOCKER_IMAGE || exit 1
+						 ;;
+				esac
+
+				ip=$(docker inspect $container 2>/dev/null | jq -r .[0].NetworkSettings.Networks.$DOCKER_NETWORK.IPAddress)
+				[ "$ip " ] && {
+					echo "$ip"
+					# generate local host entry
+					tmp="${TMPDIR}hosts.$$"
+					egrep -v "^$ip" /etc/hosts > $tmp
+					echo "$ip $container.$DOCKER_NETWORK.local $container" >> $tmp
+					sudo cp $tmp /etc/hosts
+				}
+				;;
+
+stop)			# agorum [cfg] stop container
+				# help stop -- "$@"
+				container=${1:-agorum} 
+				state=$(docker inspect $container 2>/dev/null | jq -r .[0].State.Status)
+				case "$state" in
+				running) echo "stopping [$container] ..."
+						 docker stop $container
+						 ;;
+				exited)  echo "container [$container] not running!"
+						 ;;
+				*)       echo "container [$container] not found!" 
+						 ;;
+				esac
+				;;
+
 
 esac
