@@ -225,13 +225,10 @@ usage: agorum [config] cd [directory]
        open terminal at one of the
        following directories
 
-       workdir   $WORKDIR
-       develop   $DEVROOT
-       project   $_MOUNT/$PROJECT 
-       customers $_MOUNT/Administration/customers 
-       mount     $_MOUNT
-       share     $_MOUNT 
-       private   $_MOUNT 
+       workdir             $WORKDIR
+       develop             $DEVROOT
+       projects|customers  $_MOUNT/Administration/customers 
+       mount|share|private $_MOUNT
 
 EOF
 ;;
@@ -577,18 +574,16 @@ current environment
 EOF
 ;;
 
-cd)				_MOUNT=$(mountpoint $HOST private)
+cd)				# open terminal at spezified directory
+				_MOUNT=$(mountpoint $HOST private)
 				help cd -- "$@"
 
 				case "$1" in
-				work*) 		_DIR="$WORKDIR" ;;
-				dev*)		_DIR="$(realpath "$WORKDIR/..")" ;;
-				core) 		_DIR="$_MOUNT/$PROJECT"	;;
-				custom*) 	_DIR="$_MOUNT/Administration/customers" ;;
-				mount) 		_DIR="$_MOUNT" ;;
-				share) 		_DIR="$_MOUNT" ;;
-				private) 	_DIR="$_MOUNT" ;;
-				*) 			_DIR="$HOME"   ;;
+				work*) 					_DIR="$WORKDIR" ;;
+				dev*)					_DIR="$(realpath "$WORKDIR/..")" ;;
+				custom*|project*) 		_DIR="$_MOUNT/Administration/customers" ;;
+				mount|share|private)	_DIR="$_MOUNT" ;;
+				*) 						_DIR="$HOME"   ;;
 				esac
 				
 				[ "$2" ] && _DIR="$_DIR/$2"
@@ -596,7 +591,7 @@ cd)				_MOUNT=$(mountpoint $HOST private)
 					echo "invalid directory [$_DIR]"
 					exit 1
 				}
-				$TERMINAL "Default" "cd $_DIR"
+				$TERMINAL "Default" "cd \"$_DIR\""
 				;;
 
 query)			help query -- "$@"
