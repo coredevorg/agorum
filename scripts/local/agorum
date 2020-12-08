@@ -642,5 +642,20 @@ stop)			# agorum [cfg] stop container
 				esac
 				;;
 
+messages)		# extract messages properties from host/container filesystem
+				# help messages -- "@" 
+				container=${1:-agorum}
+				target="$DEVROOT/messages/$container"
+				# create messages archive in volume container
+				docker exec -it $HOST bash -c "cd /opt/agorum/agorumcore/jboss/server/default/deploy/roi.ear/roiwebui.war/WEB-INF/config/messages && tar cvzf /opt/agorum/data/messages.tgz ."
+				[ -d "$target" ] || mkdir -p "$target"
+				# move to local messages directory and decode unicod escapes \u00.. 
+				ssh root@docker "cat /mnt/sda1/data/$container/messages.tgz" | tar xvzf - -C "$target"
+				cd "$target" && find . -name "*.properties" -exec ../decode.py {} \;
+				# search translation string
+				# cd $target && grep -ri "Search" *
+				# => key (use in template manager's "Search search smart assistent" full text search)
+				# => module (customer project where the string is defined)
+				;;
 
 esac
