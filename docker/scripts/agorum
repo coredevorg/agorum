@@ -15,10 +15,16 @@ case "$1" in
             echo "$status"
             exit $ret
             ;;
+
+     #
+     # change directory usage: . agorum <default>
+     # without subshell creation
+     # 
+
     root|server|default)
-            cd $SERVER && exec bash
+            cd $SERVER 
             ;;
     messages)
-            cd /opt/agorum/agorumcore/jboss/server/default/deploy/roi.ear/roiwebui.war/WEB-INF/config/messages && exec bash
+            cd /opt/agorum/agorumcore/jboss/server/default/deploy/roi.ear/roiwebui.war/WEB-INF/config/messages
             ;;
 esac
