@@ -16,7 +16,7 @@ PROG=$(basename $0)
 SCRIPT="$0"
 ARGS="$@"
 CFGROOT="$HOME/.local/etc"
-IDECMD="code -n"
+IDECMD="vc -n"
 
 function realpath() { ( cd "$1" && pwd -P ) ; }
 REALPATH="$(readlink $SCRIPT)" || REALPATH="$SCRIPT"
@@ -172,13 +172,16 @@ EOF
 ;;
 
 project) checkopts "i" "DEV_OPTS" "$@" ; shift $?
+		 project="$1"
+
 cat <<EOF
 
-usage agorum [cfg] project [-i] [workdir] [project]
+usage agorum [cfg] project [-i] <project>
 
        config   $CFGFILE
-       workdir  ${1:-$WORKDIR}
-       project  ${2:-$PROJECT}
+       project  $project
+       workdir  $WORKDIR
+       source   $PROJECT
 
        use option -i to initalize new development project
 
@@ -218,7 +221,7 @@ usage: agorum [config] cd [directory]
 
        workdir   $WORKDIR
        develop   $DEVROOT
-       core      $_MOUNT/$DEVELOP 
+       project   $_MOUNT/$PROJECT 
        customers $_MOUNT/Administration/customers 
        mount     $_MOUNT
        share     $_MOUNT 
@@ -267,6 +270,11 @@ else
 fi
 }
 
+DOCKER_IMAGE=agorum
+DOCKER_NETWORK=office
+DOCKER_DATA=/opt/agorum/data
+DOCKER_MOUNT=/mnt/sda1/data
+
 # set parms from agorum[-config].cfg
 if [ -f "$CFGROOT/agorum-${1}.cfg" ]
 then
@@ -274,6 +282,7 @@ then
 	source "$CFGFILE"
 	shift
 else
+	# use defaults from script and agorum.cfg
 	DMS=${DMS:-"agorum/private"}
 	SHARE=${SHARE:-"private"}
 	VM=${VM:-"agorum"}
@@ -285,10 +294,6 @@ else
 	LINKROOT=${LINKROOT:-"$HOME/Desktop"}
 	TMP=${TMP:-$HOME/tmp}
 	CFGFILE=$CFGROOT/agorum.cfg
-	DOCKER_IMAGE=agorum
-	DOCKER_NETWORK=office
-	DOCKER_DATA=/opt/agorum/data
-	DOCKER_MOUNT=/mnt/sda1/data
 	[ -f "$CFGFILE" ] && source "$CFGFILE" || CFGFILE=
 fi
 
@@ -487,27 +492,29 @@ api)            # command line interface to agorum REST api
 				esac
 				;;
 
-project)		# agorum [cfg] project [-i] [WORKDIR] [PROJECT]
+project)		# agorum [cfg] project [-i] <project>
 				# WORKDIR: ~/Develop/agorum/develop/<project>
-				# PROJECT: [MOUNT] / [Administration/customers/]<project>
+				# GIT_WORKTREE: [MOUNT] / [Administration/customers/]<project>
 
 				help project -- "$@"
 
 				checkopts "i" "DEV_OPTS" "$@" ; shift $?
+				project="$1"
+
 				[ "$DEV_OPTS_i" ] && {
 					# initailize development project
 					mkdir -p "$WORKDIR" && cd "$WORKDIR" 
 					# TODO: project link, git init, ...
 				}
 
-				cd "$WORKDIR" && cd $(basename "$PROJECT") && [ -d ".git" ] && {
+				cd "$WORKDIR/$project" && [ -d ".git" ] && {
 					GIT_WORKTREE=$( git config --local --list | grep "core.worktree" | cut -d'=' -f2 )					
 					[ -d "$GIT_WORKTREE" ] && {
 						ln -sf "$GIT_WORKTREE" .
 						export GIT_DIR="$(pwd)/.git"
-						$IDECMD -n $( basename "$GIT_WORKTREE" )
-					}
-				}
+						$IDECMD "$GIT_WORKTREE"
+					} || echo "project source directory [$GIT_WORKTREE] not found!"
+				} || echo "project work directory [$WORKDIR/$project] not found!"
 				;;
 
 develop)		# agorum [cfg] develop
@@ -557,7 +564,7 @@ current environment
     vm       ${1:-$VM} [$VM_AGORUM_ROOT/${1:-$VM}.vmwarevm/${1:-$VM}.vmx]
     host     ${2:-$HOST}
     share    ${3:-$SHARE}
-    develop  ${4:-$DEVELOP}
+    develop  ${4:-$PROJECT}
     workdir  ${5:-$WORKDIR}
 
 EOF
@@ -569,7 +576,7 @@ cd)				_MOUNT=$(mount | grep "$DMS" | sed 's/.* on \(.*\) (.*/\1/')
 				case "$1" in
 				work*) 		_DIR="$WORKDIR" ;;
 				dev*)		_DIR="$(realpath "$WORKDIR/..")" ;;
-				core) 		_DIR="$_MOUNT/$DEVELOP"	;;
+				core) 		_DIR="$_MOUNT/$PROJECT"	;;
 				custom*) 	_DIR="$_MOUNT/Administration/customers" ;;
 				mount) 		_DIR="$_MOUNT" ;;
 				share) 		_DIR="$_MOUNT" ;;
