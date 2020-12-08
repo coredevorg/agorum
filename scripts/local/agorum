@@ -37,6 +37,12 @@ function checkopts() {
     return $((OPTIND-1))
 }
 
+function mountpoint() {
+	local host=${1:-agorum}
+	local share=${2:-private}
+	echo $( mount | grep "$host" | grep "$share" | sed 's/.* on \(.*\) (.*/\1/' )
+}
+
 # external helpers called by xargs
 case "$1" in
 
@@ -550,6 +556,7 @@ shutdown)		# agorum [cfg] shutdown vm host share project workdir
 				;;
 
 status)			# agorum [cfg] status
+				# TODO: complete rework required: docker, webdav, project, ...
 				_VMX=$(vmrun list | grep $VM)
 				[ "$_VMX" ] && _MOUNT=$(mount | grep $DMS)
 
@@ -570,7 +577,7 @@ current environment
 EOF
 ;;
 
-cd)				_MOUNT=$(mount | grep "$DMS" | sed 's/.* on \(.*\) (.*/\1/')
+cd)				_MOUNT=$(mountpoint $HOST private)
 				help cd -- "$@"
 
 				case "$1" in
