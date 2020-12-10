@@ -8,8 +8,8 @@
 #
 
 [ "$AGORUM_DEBUG" ] && {
-	set -x
-	DRYRUN="echo"
+    set -x
+    DRYRUN="echo"
 }
 
 PROG=$(basename $0)
@@ -37,79 +37,91 @@ function checkopts() {
     return $((OPTIND-1))
 }
 
+function checkstate() {
+    local container="$1" ret 
+    local state=$(docker inspect $container 2>/dev/null | jq -r .[0].State.Status)
+    case "$state" in
+    running) ret=0;;
+    exited)  ret=1;;
+         *)  ret=2 ; state=missing ;;
+    esac
+    echo $state
+    return $ret
+}
+
 function mountpoint() {
-	local host=${1:-agorum}
-	local share=${2:-private}
-	echo $( mount | grep "$host" | grep "$share" | sed 's/.* on \(.*\) (.*/\1/' )
+    local host=${1:-agorum}
+    local share=${2:-private}
+    echo $( mount | grep "$host" | grep "$share" | sed 's/.* on \(.*\) (.*/\1/' )
 }
 
 # external helpers called by xargs
 case "$1" in
 
-	_display)	fname="$2"
-				echo "${fname/.\//}"
-				exit 0
-				;;
-	_query)		fname="$2"
-				expr="${3:-.selectors}"
-				filter="$4"
-				check=$(jq "$expr" "$fname")
-				# key found and non empty value?
-				[ "$check" == "{}" -o "$check" == "null" ] && exit 0
-				# suppress empty "Default": selectors
-				[ "$expr" == ".selectors" ] && {
-					keys=$(echo $check | jq 'keys | length')
-					[ $keys -eq 1 ] && [ "$(echo $check | jq -r .Default)" == "" ] && exit 0 
-				}
-				[ "$filter" ] &&  {
-					opts="-qi"
-					# check negation of filter expression
-					[ "$filter" != "${filter/! //}" ] && { opts="$opts -v" ; filter="${filter/! /}" ; }
-					echo "$check" | egrep -v '({|})' | sed 's/\"//g' | egrep $opts "$filter" || exit 0
-				}
-				echo "${fname/.\//}"
-				echo "$check" | egrep -v '({|})' | sed 's/\"//g'
-				echo
-				exit 0
-				;;
-	_find)		fname="$2"
-				expr="$3"
-				egrep -q "$expr" "$fname" && {
-					echo "${fname/.\//}"
-					egrep "$expr" "$fname"
-					echo	
-				}
-				exit 0
-				;;
+    _display)    fname="$2"
+                echo "${fname/.\//}"
+                exit 0
+                ;;
+    _query)        fname="$2"
+                expr="${3:-.selectors}"
+                filter="$4"
+                check=$(jq "$expr" "$fname")
+                # key found and non empty value?
+                [ "$check" == "{}" -o "$check" == "null" ] && exit 0
+                # suppress empty "Default": selectors
+                [ "$expr" == ".selectors" ] && {
+                    keys=$(echo $check | jq 'keys | length')
+                    [ $keys -eq 1 ] && [ "$(echo $check | jq -r .Default)" == "" ] && exit 0 
+                }
+                [ "$filter" ] &&  {
+                    opts="-qi"
+                    # check negation of filter expression
+                    [ "$filter" != "${filter/! //}" ] && { opts="$opts -v" ; filter="${filter/! /}" ; }
+                    echo "$check" | egrep -v '({|})' | sed 's/\"//g' | egrep $opts "$filter" || exit 0
+                }
+                echo "${fname/.\//}"
+                echo "$check" | egrep -v '({|})' | sed 's/\"//g'
+                echo
+                exit 0
+                ;;
+    _find)        fname="$2"
+                expr="$3"
+                egrep -q "$expr" "$fname" && {
+                    echo "${fname/.\//}"
+                    egrep "$expr" "$fname"
+                    echo    
+                }
+                exit 0
+                ;;
 esac
 
 function need_help() {
 
-	local ifs="$1" ; shift
-	local err=1 new=
+    local ifs="$1" ; shift
+    local err=1 new=
     while [ $# -gt 0 ]
-	do
-		case "$1" in
-		help|--help|-h|-\?|\?) err=0 ;;
+    do
+        case "$1" in
+        help|--help|-h|-\?|\?) err=0 ;;
         *) [ "$new" ] && new="${new}${ifs}$1" || new="$1" ;;
-		esac
-		shift
-	done
+        esac
+        shift
+    done
     echo "$new"
-	return $err
+    return $err
 }
 
 # check help and display help
 function help() {
 
-	local topic="$1" ; shift
-	local func="$1"  ; shift
-	local args="$@"
-	local ifs_args=
-	local _ifs="$IFS" # save original IFS
-	local _ifs_="|"   # temp IFS to process quoted args
+    local topic="$1" ; shift
+    local func="$1"  ; shift
+    local args="$@"
+    local ifs_args=
+    local _ifs="$IFS" # save original IFS
+    local _ifs_="|"   # temp IFS to process quoted args
 
-	[ "$topic" == "agorum" ] && {
+    [ "$topic" == "agorum" ] && {
 
 cat <<EOF
 
@@ -119,23 +131,26 @@ usage: agorum [config] command [options]
        for one of the the following commands:
 
        vm start|stop             virtual machine
-       mount|umount              agorum share
+       mount|umount              agorum smb share 
        startup|shutdown|status   agorum development context
        project                   agorum customer project
        develop                   agorum develop environment
        query expression          search expression in .json
        find  expression          search expression in .js
        cd                        open terminal at location
-       ssh                       open agorum remote terminal
+       start|stop                docker container   
+       ssh|exec                  open agorum remote terminal
+       messages                  search label in messages
+
 
 EOF
-	exit
-	}
+    exit
+    }
 
 
 if ifs_args=$(need_help "$_ifs_" "$@")
 then
-	
+    
 # reset args with stripped help options
 IFS="$_ifs_" && set -- $ifs_args && IFS="$_ifs"
 
@@ -178,11 +193,11 @@ EOF
 ;;
 
 project) checkopts "i" "DEV_OPTS" "$@" ; shift $?
-		 project="$1"
+         project="$1"
 
 cat <<EOF
 
-usage agorum [cfg] project [-i] <project>
+usage  agorum [cfg] project [-i] <project>
 
        config   $CFGFILE
        project  $project
@@ -196,7 +211,7 @@ EOF
 
 develop) cat <<EOF
 
-usage agorum [cfg] develop
+usage  agorum [cfg] develop
 
        config   $CFGFILE
        develop  $DEVROOT
@@ -261,6 +276,51 @@ usage: agorum find expression
 EOF
 ;;
 
+start)    cat <<EOF
+
+usage:  agorum [cfg] start [options] container [cmd]
+
+        start docker container 
+
+EOF
+;;
+
+stop)    cat <<EOF
+
+usage:  agorum [cfg] stop container
+
+        stop docker container 
+
+EOF
+;;
+
+ssh)    cat <<EOF
+
+usage:  agorum [cfg] ssh [cmd]
+
+        run command/bash at agorum host 
+
+EOF
+;;
+
+exec)    cat <<EOF
+
+usage:  agorum [cfg] exec [cmd]
+
+        run command/bash at agorum host 
+
+EOF
+;;
+
+messages)    cat <<EOF
+
+usage:  agorum [cfg] messages
+
+        search label in agorum messages  
+
+EOF
+;;
+
 *) cat <<EOF
 No help avalaible for topic [$topic]
 EOF
@@ -268,8 +328,8 @@ EOF
 esac 
 exit 0
 else
-	# forward call to internal function with args
-	[ "$func" ] && [ "$func" != "--" ] && $func "$@"
+    # forward call to internal function with args
+    [ "$func" ] && [ "$func" != "--" ] && $func "$@"
 fi
 }
 
@@ -281,23 +341,23 @@ DOCKER_MOUNT=/mnt/sda1/data
 # set parms from agorum[-config].cfg
 if [ -f "$CFGROOT/agorum-${1}.cfg" ]
 then
-	CFGFILE="$CFGROOT/agorum-$1.cfg"
-	source "$CFGFILE"
-	shift
+    CFGFILE="$CFGROOT/agorum-$1.cfg"
+    source "$CFGFILE"
+    shift
 else
-	# use defaults from script and agorum.cfg
-	DMS=${DMS:-"agorum/private"}
-	SHARE=${SHARE:-"private"}
-	VM=${VM:-"agorum"}
-	USERNAME=${USERNAME:-"roi"}
-	PASSWORD=${PASSWORD:-"agorum"}
-	HOST=${HOST:-"agorum"}
-	MOUNT=${MOUNT:-"$HOME/Develop/agorum/mnt"}
-	VM_AGORUM_ROOT=${VM_AGORUM_ROOT:-"$HOME/Develop/agorum/vm"}
-	LINKROOT=${LINKROOT:-"$HOME/Desktop"}
-	TMP=${TMP:-$HOME/tmp}
-	CFGFILE=$CFGROOT/agorum.cfg
-	[ -f "$CFGFILE" ] && source "$CFGFILE" || CFGFILE=
+    # use defaults from script and agorum.cfg
+    DMS=${DMS:-"agorum/private"}
+    SHARE=${SHARE:-"private"}
+    VM=${VM:-"agorum"}
+    USERNAME=${USERNAME:-"roi"}
+    PASSWORD=${PASSWORD:-"agorum"}
+    HOST=${HOST:-"agorum"}
+    MOUNT=${MOUNT:-"$HOME/Develop/agorum/mnt"}
+    VM_AGORUM_ROOT=${VM_AGORUM_ROOT:-"$HOME/Develop/agorum/vm"}
+    LINKROOT=${LINKROOT:-"$HOME/Desktop"}
+    TMP=${TMP:-$HOME/tmp}
+    CFGFILE=$CFGROOT/agorum.cfg
+    [ -f "$CFGFILE" ] && source "$CFGFILE" || CFGFILE=
 fi
 
 VM_START_OPT_a=${VM_AGORUM_START:-""}
@@ -309,253 +369,253 @@ function login() {
 
     local username=${1:-$USERNAME}
     local password=${2:-$PASSWORD}
-	local path="api/rest/session"
-	local cookies="$HOME/tmp/agorum.cookies"
-	unset AGORUM_sessionId AGORUM_JSESSIONID
+    local path="api/rest/session"
+    local cookies="$HOME/tmp/agorum.cookies"
+    unset AGORUM_sessionId AGORUM_JSESSIONID
 
-	result=$(curl -s -c $cookies \
-				  -H "Content-Type: application/x-www-form-urlencoded" \
-	              -H "Accept: application/json" \
-				  -d "username=${username}&password=${password}" \
-				  "$URL/$path")
+    result=$(curl -s -c $cookies \
+                  -H "Content-Type: application/x-www-form-urlencoded" \
+                  -H "Accept: application/json" \
+                  -d "username=${username}&password=${password}" \
+                  "$URL/$path")
 
-	[ $(echo $result | jq .success) == true ] || { 
-		echo $result | jq -r .message 1>&2 
-		rm $cookies
-		exit 1;
-	}
-	AGORUM_sessionId=$(echo $result | jq -r .sessionId)
-	AGORUM_JSESSIONID=$(grep JSESSIONID $cookies | awk '{print $7}')
-	rm $cookies
+    [ $(echo $result | jq .success) == true ] || { 
+        echo $result | jq -r .message 1>&2 
+        rm $cookies
+        exit 1;
+    }
+    AGORUM_sessionId=$(echo $result | jq -r .sessionId)
+    AGORUM_JSESSIONID=$(grep JSESSIONID $cookies | awk '{print $7}')
+    rm $cookies
 }
 
 function logout() {
-	
-	local sessionId=${1:-"$AGORUM_sessionId"}
-	local path="api/rest/session"
+    
+    local sessionId=${1:-"$AGORUM_sessionId"}
+    local path="api/rest/session"
 
-	result=$(curl -s -X DELETE \
-				  -H "Content-Type: application/x-www-form-urlencoded" \
-	              -H "Accept: application/json" \
-				  -d "sessionId=$sessionId" \
-				  "$URL/$path")
+    result=$(curl -s -X DELETE \
+                  -H "Content-Type: application/x-www-form-urlencoded" \
+                  -H "Accept: application/json" \
+                  -d "sessionId=$sessionId" \
+                  "$URL/$path")
 
-	[ $(echo $result | jq .success) == true ] || { 
-		echo $result | jq -r .message 1>&2 
-		rm $cookies
-		exit 1;
-	}
-	unset AGORUM_sessionId AGORUM_JSESSIONID
+    [ $(echo $result | jq .success) == true ] || { 
+        echo $result | jq -r .message 1>&2 
+        rm $cookies
+        exit 1;
+    }
+    unset AGORUM_sessionId AGORUM_JSESSIONID
 }
 
 function vm-start() {
 
-	checkopts "as" "VM_START_OPT" "$@" ; shift $?
-	
-	local vm=${1:-$VM}
-	local host=${2:-$HOST}
-	local vmx="${VM_AGORUM_ROOT}/$vm.vmwarevm/$vm.vmx"
-	local counter=0 stamp=$(date '+%Y-%m-%d_%H%M%S')
+    checkopts "as" "VM_START_OPT" "$@" ; shift $?
+    
+    local vm=${1:-$VM}
+    local host=${2:-$HOST}
+    local vmx="${VM_AGORUM_ROOT}/$vm.vmwarevm/$vm.vmx"
+    local counter=0 stamp=$(date '+%Y-%m-%d_%H%M%S')
 
-	vmrun list | grep -q $vmx || {
-		echo "starting [$vm] ..."
-		[ "$VM_START_OPT_s" == "true" ] && {
-			echo "creating snapshop [$stamp]"
-			$DRYRUN vmrun snapshot "$vmx" "$stamp" || exit 
-		}
-		$DRYRUN vmrun start "$vmx" nogui || exit
-		echo -n "waiting for host ."
-		until ping -c1 -t1 -W1 $host >/dev/null 2>&1
-		do
-			echo -n "."
-			let counter++
-			[ $counter -gt 60 ] && exit
-		done
-		echo ""
-		[ "$VM_START_OPT_a" == "true" ] && {
-			$DRYRUN ssh root@$host "agorum start"
-		}
-	}
+    vmrun list | grep -q $vmx || {
+        echo "starting [$vm] ..."
+        [ "$VM_START_OPT_s" == "true" ] && {
+            echo "creating snapshop [$stamp]"
+            $DRYRUN vmrun snapshot "$vmx" "$stamp" || exit 
+        }
+        $DRYRUN vmrun start "$vmx" nogui || exit
+        echo -n "waiting for host ."
+        until ping -c1 -t1 -W1 $host >/dev/null 2>&1
+        do
+            echo -n "."
+            let counter++
+            [ $counter -gt 60 ] && exit
+        done
+        echo ""
+        [ "$VM_START_OPT_a" == "true" ] && {
+            $DRYRUN ssh root@$host "agorum start"
+        }
+    }
 }
 
 function vm-stop() {
 
-	local vm=${1:-$VM} 
-	local host=${2:-$HOST}
-	local vmx="${VM_AGORUM_ROOT}/$vm.vmwarevm/$vm.vmx"
+    local vm=${1:-$VM} 
+    local host=${2:-$HOST}
+    local vmx="${VM_AGORUM_ROOT}/$vm.vmwarevm/$vm.vmx"
 
-	vmrun list | grep -q $vmx && {
-		# umount agorum
-		ssh root@$host "agorum stop"
-		vmrun stop "$vmx"
-	}
+    vmrun list | grep -q $vmx && {
+        # umount agorum
+        ssh root@$host "agorum stop"
+        vmrun stop "$vmx"
+    }
 }
 
 # agorum mount [agorum/dms] [roi] [agorum] 
 function cifs-mount() {
 
-	local dms=${1:-$DMS}
-	local username=${2:-$USERNAME}
-	local password=${3:-$PASSWORD}
-	set -- ${dms//\// }
-	local host="$1"
-	dms="$2"
-	local mount="${MOUNT}/${host}/${dms}"
-	local link="$host [$dms]"
+    local dms=${1:-$DMS}
+    local username=${2:-$USERNAME}
+    local password=${3:-$PASSWORD}
+    set -- ${dms//\// }
+    local host="$1"
+    dms="$2"
+    local mount="${MOUNT}/${host}/${dms}"
+    local link="$host [$dms]"
 
-	[ -d "$mount" ] || mkdir -p "$mount"
-	mount | grep -q "$mount" || {
-		[ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
-		mount -t smbfs cifs://${username}:${password}@${host}/${dms} "$mount"
-		( let counter=0
-		  while [ $counter -lt 60 ]
-		  do
-		  	sleep 1 ; ((counter++))
-			[ -d "$mount" ] && {
-				mkalias $mount $LINKROOT "$link"
-				break	
-			}
-		  done
-		) &
-		# [ -f "${LINKROOT}/${link}" ] || { sleep 3 ; mkalias $mount $LINKROOT "$link"; }
-	}
-	# check and set error level
-	mount | grep -q "$mount"
+    [ -d "$mount" ] || mkdir -p "$mount"
+    mount | grep -q "$mount" || {
+        [ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
+        mount -t smbfs cifs://${username}:${password}@${host}/${dms} "$mount"
+        ( let counter=0
+          while [ $counter -lt 60 ]
+          do
+              sleep 1 ; ((counter++))
+            [ -d "$mount" ] && {
+                mkalias $mount $LINKROOT "$link"
+                break    
+            }
+          done
+        ) &
+        # [ -f "${LINKROOT}/${link}" ] || { sleep 3 ; mkalias $mount $LINKROOT "$link"; }
+    }
+    # check and set error level
+    mount | grep -q "$mount"
 }
 
 function cifs-umount() {
 
-	local dms=${1:-$DMS}
-	# local username=${2:-$USERNAME}
-	# local password=${3:-$PASSWORD}
-	set -- ${dms//\// }
-	local host="$1"
-	dms="$2"
-	local mount="${MOUNT}/${host}/${dms}"
-	local link="$host [$dms]"
-	local ret=0
+    local dms=${1:-$DMS}
+    # local username=${2:-$USERNAME}
+    # local password=${3:-$PASSWORD}
+    set -- ${dms//\// }
+    local host="$1"
+    dms="$2"
+    local mount="${MOUNT}/${host}/${dms}"
+    local link="$host [$dms]"
+    local ret=0
 
-	mount | grep -q "$mount" && {
-		[ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
-		umount -f "$mount"
-		# ret=$?
-	}
-	mount | grep -q "$mount" || {
-		[ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
-	}
-	# return $ret
-	mount | grep -q -v "$mount"
+    mount | grep -q "$mount" && {
+        [ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
+        umount -f "$mount"
+        # ret=$?
+    }
+    mount | grep -q "$mount" || {
+        [ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
+    }
+    # return $ret
+    mount | grep -q -v "$mount"
 }
 
 case "$CMD" in
 
 help|--help|-h|-\?|\?) help agorum
-				;;
+                ;;
 
-mount)			help mount cifs-mount "$@"
-				;;
+mount)            help mount cifs-mount "$@"
+                ;;
 
-umount)			help umount cifs-umount "$@"
-				;;
+umount)            help umount cifs-umount "$@"
+                ;;
 
-vm)				# start/stop agorum vms
-				SUBCMD="$1" ; shift
-				case "$SUBCMD" in
-				start)	# startup virtual machine
-						help vm vm-start "$@"
-						checkopts "as" "VM_START_OPT" "$@" ; shift $?
-						;;
-				stop)	help vm vm-stop "$@"  ;;
-				*)		help vm -- --help     ;;
-				esac
-				;;
+vm)                # start/stop agorum vms
+                SUBCMD="$1" ; shift
+                case "$SUBCMD" in
+                start)    # startup virtual machine
+                        help vm vm-start "$@"
+                        checkopts "as" "VM_START_OPT" "$@" ; shift $?
+                        ;;
+                stop)    help vm vm-stop "$@"  ;;
+                *)        help vm -- --help     ;;
+                esac
+                ;;
 
 api)            # command line interface to agorum REST api
-				case "$1" in
-				http*) URL="$1" ; shift ;;
-				*) URL="http://$HOST" ; SUBCMD="$1" ; shift ;;
-				esac
-				case "$SUBCMD" in
-				login) 	# just login and set JSESSIONID cookie
-						login "$1" "$2"
-						echo "export AGORUM_sessionId=$AGORUM_sessionId"
-						echo "export AGORUM_JSESSIONID=$AGORUM_JSESSIONID"
-						;;
-				logout)	logout "$1"
-						;;
-				asa)	profile="$1" ; shift
-						path="api/rest/faconfigdesigner/export"
-						[ "$AGORUM_JSESSIONID" ] || login "$1" "$2"
-						curl -b "JSESSIONID=$AGORUM_JSESSIONID" \
-						  	 -o "$profile.zip" \
-							 -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' \
-							 -H 'Accept-Encoding: gzip, deflate' \
-							 "$URL/$path/${profile// /%20}"
-						;;
-				esac
-				;;
+                case "$1" in
+                http*) URL="$1" ; shift ;;
+                *) URL="http://$HOST" ; SUBCMD="$1" ; shift ;;
+                esac
+                case "$SUBCMD" in
+                login)     # just login and set JSESSIONID cookie
+                        login "$1" "$2"
+                        echo "export AGORUM_sessionId=$AGORUM_sessionId"
+                        echo "export AGORUM_JSESSIONID=$AGORUM_JSESSIONID"
+                        ;;
+                logout)    logout "$1"
+                        ;;
+                asa)    profile="$1" ; shift
+                        path="api/rest/faconfigdesigner/export"
+                        [ "$AGORUM_JSESSIONID" ] || login "$1" "$2"
+                        curl -b "JSESSIONID=$AGORUM_JSESSIONID" \
+                               -o "$profile.zip" \
+                             -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' \
+                             -H 'Accept-Encoding: gzip, deflate' \
+                             "$URL/$path/${profile// /%20}"
+                        ;;
+                esac
+                ;;
 
-project)		# agorum [cfg] project [-i] <project>
-				# WORKDIR: ~/Develop/agorum/develop/<project>
-				# GIT_WORKTREE: [MOUNT] / [Administration/customers/]<project>
+project)        # agorum [cfg] project [-i] <project>
+                # WORKDIR: ~/Develop/agorum/develop/<project>
+                # GIT_WORKTREE: [MOUNT] / [Administration/customers/]<project>
 
-				help project -- "$@"
+                help project -- "$@"
 
-				checkopts "i" "DEV_OPTS" "$@" ; shift $?
-				project="$1"
+                checkopts "i" "DEV_OPTS" "$@" ; shift $?
+                project="$1"
 
-				[ "$DEV_OPTS_i" ] && {
-					# initailize development project
-					mkdir -p "$WORKDIR" && cd "$WORKDIR" 
-					# TODO: project link, git init, ...
-				}
+                [ "$DEV_OPTS_i" ] && {
+                    # initailize development project
+                    mkdir -p "$WORKDIR" && cd "$WORKDIR" 
+                    # TODO: project link, git init, ...
+                }
 
-				cd "$WORKDIR/$project" && [ -d ".git" ] && {
-					GIT_WORKTREE=$( git config --local --list | grep "core.worktree" | cut -d'=' -f2 )					
-					[ -d "$GIT_WORKTREE" ] && {
-						ln -sf "$GIT_WORKTREE" .
-						export GIT_DIR="$(pwd)/.git"
-						$IDECMD "$GIT_WORKTREE"
-					} || echo "project source directory [$GIT_WORKTREE] not found!"
-				} || echo "project work directory [$WORKDIR/$project] not found!"
-				;;
+                cd "$WORKDIR/$project" && [ -d ".git" ] && {
+                    GIT_WORKTREE=$( git config --local --list | grep "core.worktree" | cut -d'=' -f2 )                    
+                    [ -d "$GIT_WORKTREE" ] && {
+                        ln -sf "$GIT_WORKTREE" .
+                        export GIT_DIR="$(pwd)/.git"
+                        $IDECMD "$GIT_WORKTREE"
+                    } || echo "project source directory [$GIT_WORKTREE] not found!"
+                } || echo "project work directory [$WORKDIR/$project] not found!"
+                ;;
 
-develop)		# agorum [cfg] develop
-				help develop -- "$@"
-				$IDECMD -n "$DEVROOT"
-				;;
+develop)        # agorum [cfg] develop
+                help develop -- "$@"
+                $IDECMD -n "$DEVROOT"
+                ;;
 
-startup)		# agorum [cfg] startup vm host share project workdir 
-				help startup -- "$@"
+startup)        # agorum [cfg] startup vm host share project workdir 
+                help startup -- "$@"
 
-				vm-start
-				ssh root@$HOST "agorum start"
-        		cifs-mount
+                vm-start
+                ssh root@$HOST "agorum start"
+                cifs-mount
 
-				private=$(mount | grep $MOUNT | sed 's/.* on \(.*\) (.*/\1/')
-				[ -d "$private/$PROJECT" ] && [ -d "$WORKDIR" ] && {
-					cd "$WORKDIR"	
-					ln -sf "$private/$PROJECT" .
-					export GIT_DIR="$(pwd)/.git"
-					$IDECMD -n cdev.core 
-				} 
-				;;
+                private=$(mount | grep $MOUNT | sed 's/.* on \(.*\) (.*/\1/')
+                [ -d "$private/$PROJECT" ] && [ -d "$WORKDIR" ] && {
+                    cd "$WORKDIR"    
+                    ln -sf "$private/$PROJECT" .
+                    export GIT_DIR="$(pwd)/.git"
+                    $IDECMD -n cdev.core 
+                } 
+                ;;
 
-shutdown)		# agorum [cfg] shutdown vm host share project workdir
-				help shutdown -- "$@"
+shutdown)        # agorum [cfg] shutdown vm host share project workdir
+                help shutdown -- "$@"
 
-				cd "$WORKDIR" && {
-					project=$(basename $PROJECT)
-					[ -L "$project" ] && unlink "$project"
-				}
-        		cifs-umount 
-        		vm-stop
-				;;
+                cd "$WORKDIR" && {
+                    project=$(basename $PROJECT)
+                    [ -L "$project" ] && unlink "$project"
+                }
+                cifs-umount 
+                vm-stop
+                ;;
 
-status)			# agorum [cfg] status
-				# TODO: complete rework required: docker, webdav, project, ...
-				_VMX=$(vmrun list | grep $VM)
-				[ "$_VMX" ] && _MOUNT=$(mount | grep $DMS)
+status)            # agorum [cfg] status
+                # TODO: complete rework required: docker, webdav, project, ...
+                _VMX=$(vmrun list | grep $VM)
+                [ "$_VMX" ] && _MOUNT=$(mount | grep $DMS)
 
 cat <<EOF
 
@@ -574,97 +634,98 @@ current environment
 EOF
 ;;
 
-cd)				# open terminal at spezified directory
-				_MOUNT=$(mountpoint $HOST private)
-				help cd -- "$@"
+cd)                # open terminal at spezified directory
+                _MOUNT=$(mountpoint $HOST private)
+                help cd -- "$@"
 
-				case "$1" in
-				work*) 					_DIR="$WORKDIR" ;;
-				dev*)					_DIR="$(realpath "$WORKDIR/..")" ;;
-				custom*|project*) 		_DIR="$_MOUNT/Administration/customers" ;;
-				mount|share|private)	_DIR="$_MOUNT" ;;
-				*) 						_DIR="$HOME"   ;;
-				esac
-				
-				[ "$2" ] && _DIR="$_DIR/$2"
-				[ -d "$_DIR" ] || {
-					echo "invalid directory [$_DIR]"
-					exit 1
-				}
-				$TERMINAL "Default" "cd \"$_DIR\""
-				;;
+                case "$1" in
+                work*)                     _DIR="$WORKDIR" ;;
+                dev*)                    _DIR="$(realpath "$WORKDIR/..")" ;;
+                custom*|project*)         _DIR="$_MOUNT/Administration/customers" ;;
+                mount|share|private)    _DIR="$_MOUNT" ;;
+                *)                         _DIR="$HOME"   ;;
+                esac
+                
+                [ "$2" ] && _DIR="$_DIR/$2"
+                [ -d "$_DIR" ] || {
+                    echo "invalid directory [$_DIR]"
+                    exit 1
+                }
+                $TERMINAL "Default" "cd \"$_DIR\""
+                ;;
 
-query)			help query -- "$@"
-				find . -type f \( -iname "*_config.json" ! -iname ".*" \) -print0 | \
-				xargs -0 -I{} $SCRIPT _query "{}" "$@"
-				# xargs -0 -I{} sh -c "echo '{}' && jq $1 '{}' | egrep -v '({|})' | sed 's/\"//g' ; echo"
-				;;
+query)            help query -- "$@"
+                find . -type f \( -iname "*_config.json" ! -iname ".*" \) -print0 | \
+                xargs -0 -I{} $SCRIPT _query "{}" "$@"
+                # xargs -0 -I{} sh -c "echo '{}' && jq $1 '{}' | egrep -v '({|})' | sed 's/\"//g' ; echo"
+                ;;
 
-find)			help find -- "$@"
-				find . -type f \( -iname "*.js" ! -iname ".*" \) -print0 | \
-				xargs -0 -I{} $SCRIPT _find "{}" "$1"
-				;;
+find)            help find -- "$@"
+                find . -type f \( -iname "*.js" ! -iname ".*" \) -print0 | \
+                xargs -0 -I{} $SCRIPT _find "{}" "$1"
+                ;;
 
-ssh)			# help ssh -- "$@"
-				$TERMINAL "Default" "ssh root@$HOST"
-				;;
+start)            # agorum [config] start [options] container [cmd]
+                help start -- "$@"
+                container=${1:-agorum}
+                opts="-d"
+                state=$(docker inspect $container 2>/dev/null | jq -r .[0].State.Status)
+                case "$state" in
+                running) echo "Container [$container] already running!"
+                         ;;
+                exited)  echo "Starting existing container ..."
+                         docker start $container
+                         ;;
+                *)       echo "Creating new container [$container] from image [$DOCKER_IMAGE] ..." 
+                         docker run --network=$DOCKER_NETWORK --name=$container -v $DOCKER_MOUNT/$container:$DOCKER_DATA $opts $DOCKER_IMAGE || exit 1
+                         ;;
+                esac
 
-start)			# agorum [config] start [options] container [cmd]
-				# help start -- "$@"
-				container=${1:-agorum}
-				opts="-d"
-				state=$(docker inspect $container 2>/dev/null | jq -r .[0].State.Status)
-				case "$state" in
-				running) echo "Container [$container] already running!"
-						 ;;
-				exited)  echo "Starting existing container ..."
-						 docker start $container
-						 ;;
-				*)       echo "Creating new container [$container] from image [$DOCKER_IMAGE] ..." 
-						 docker run --network=$DOCKER_NETWORK --name=$container -v $DOCKER_MOUNT/$container:$DOCKER_DATA $opts $DOCKER_IMAGE || exit 1
-						 ;;
-				esac
+                ip=$(docker inspect $container 2>/dev/null | jq -r .[0].NetworkSettings.Networks.$DOCKER_NETWORK.IPAddress)
+                [ "$ip " ] && {
+                    echo "$ip"
+                    # generate local host entry
+                    tmp="${TMPDIR}hosts.$$"
+                    egrep -v "^$ip" /etc/hosts > $tmp
+                    echo "$ip $container.$DOCKER_NETWORK.local $container" >> $tmp
+                    sudo cp $tmp /etc/hosts
+                }
+                ;;
 
-				ip=$(docker inspect $container 2>/dev/null | jq -r .[0].NetworkSettings.Networks.$DOCKER_NETWORK.IPAddress)
-				[ "$ip " ] && {
-					echo "$ip"
-					# generate local host entry
-					tmp="${TMPDIR}hosts.$$"
-					egrep -v "^$ip" /etc/hosts > $tmp
-					echo "$ip $container.$DOCKER_NETWORK.local $container" >> $tmp
-					sudo cp $tmp /etc/hosts
-				}
-				;;
+stop)            # agorum [cfg] stop container
+                help stop -- "$@"
+                container=${1:-agorum}
+                [ state=$(checkstate "$container") ] && docker stop "$container" ||
+                echo "${container}: $state"
+                ;;
 
-stop)			# agorum [cfg] stop container
-				# help stop -- "$@"
-				container=${1:-agorum} 
-				state=$(docker inspect $container 2>/dev/null | jq -r .[0].State.Status)
-				case "$state" in
-				running) echo "stopping [$container] ..."
-						 docker stop $container
-						 ;;
-				exited)  echo "container [$container] not running!"
-						 ;;
-				*)       echo "container [$container] not found!" 
-						 ;;
-				esac
-				;;
+ssh)            help ssh -- "$@"
+                $TERMINAL "Default" "ssh root@$HOST"
+                ;;
 
-messages)		# extract messages properties from host/container filesystem
-				# help messages -- "@" 
-				container=${1:-agorum}
-				target="$DEVROOT/messages/$container"
-				# create messages archive in volume container
-				docker exec -it $HOST bash -c "cd /opt/agorum/agorumcore/jboss/server/default/deploy/roi.ear/roiwebui.war/WEB-INF/config/messages && tar cvzf /opt/agorum/data/messages.tgz ."
-				[ -d "$target" ] || mkdir -p "$target"
-				# move to local messages directory and decode unicod escapes \u00.. 
-				ssh root@docker "cat /mnt/sda1/data/$container/messages.tgz" | tar xvzf - -C "$target"
-				cd "$target" && find . -name "*.properties" -exec ../decode.py {} \;
-				# search translation string
-				# cd $target && grep -ri "Search" *
-				# => key (use in template manager's "Search search smart assistent" full text search)
-				# => module (customer project where the string is defined)
-				;;
+exec)            # agorum [cfg] exec container [args]  
+                help exec -- "$@"
+                container=${1:-agorum} ; shift
+                exec_args="$@"
+                [ "$1" ] || exec_args="bash" 
+                [ state=$(checkstate "$container") ] && $TERMINAL "Default" "docker exec -it \"$container\" $exec_args" ||
+                echo "${container}: $state"
+                ;;
+
+messages)        # extract messages properties from host/container filesystem
+                help messages -- "@" 
+                container=${1:-agorum}
+                target="$DEVROOT/messages/$container"
+                # create messages archive in volume container
+                docker exec -it $HOST bash -c "cd /opt/agorum/agorumcore/jboss/server/default/deploy/roi.ear/roiwebui.war/WEB-INF/config/messages && tar cvzf /opt/agorum/data/messages.tgz ."
+                [ -d "$target" ] || mkdir -p "$target"
+                # move to local messages directory and decode unicod escapes \u00.. 
+                ssh root@docker "cat /mnt/sda1/data/$container/messages.tgz" | tar xvzf - -C "$target"
+                cd "$target" && find . -name "*.properties" -exec ../decode.py {} \;
+                # search translation string
+                # cd $target && grep -ri "Search" *
+                # => key (use in template manager's "Search search smart assistent" full text search)
+                # => module (customer project where the string is defined)
+                ;;
 
 esac
