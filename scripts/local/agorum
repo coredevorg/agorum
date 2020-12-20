@@ -639,11 +639,11 @@ cd)                # open terminal at spezified directory
                 help cd -- "$@"
 
                 case "$1" in
-                work*)                     _DIR="$WORKDIR" ;;
-                dev*)                    _DIR="$(realpath "$WORKDIR/..")" ;;
-                custom*|project*)         _DIR="$_MOUNT/Administration/customers" ;;
-                mount|share|private)    _DIR="$_MOUNT" ;;
-                *)                         _DIR="$HOME"   ;;
+                work*)                _DIR="$WORKDIR" ;;
+                dev*)                 _DIR="$(realpath "$WORKDIR/..")" ;;
+                custom*|project*)     _DIR="$_MOUNT/Administration/customers" ;;
+                mount|share|private)  _DIR="$_MOUNT" ;;
+                *)                    _DIR="$HOME"   ;;
                 esac
                 
                 [ "$2" ] && _DIR="$_DIR/$2"
