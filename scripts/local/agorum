@@ -695,8 +695,8 @@ start)            # agorum [config] start [options] container [cmd]
 stop)            # agorum [cfg] stop container
                 help stop -- "$@"
                 container=${1:-agorum}
-                [ state=$(checkstate "$container") ] && docker stop "$container" ||
-                echo "${container}: $state"
+                [ state=$(checkstate "$container") ] && { docker stop "$container" ; exit 0 ; }
+                echo "ERR: ${container} $state"
                 ;;
 
 ssh)            help ssh -- "$@"
