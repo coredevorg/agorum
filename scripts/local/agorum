@@ -686,7 +686,7 @@ start)            # agorum [config] start [options] container [cmd]
                     echo "$ip"
                     # generate local host entry
                     tmp="${TMPDIR}hosts.$$"
-                    egrep -v "^$ip" /etc/hosts > $tmp
+                    egrep -v "^${ip%.*}.* $container.$DOCKER_NETWORK.local $container" /etc/hosts > $tmp
                     echo "$ip $container.$DOCKER_NETWORK.local $container" >> $tmp
                     sudo cp $tmp /etc/hosts
                 }
