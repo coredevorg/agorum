@@ -5,6 +5,7 @@ setup/
 vm/
 develop/
 source/
+data/
 docker/sources/*.zip
 docker/sources/*.jar
 docker/sources/*.bin

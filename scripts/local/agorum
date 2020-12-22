@@ -138,7 +138,8 @@ usage: agorum [config] command [options]
        query expression          search expression in .json
        find  expression          search expression in .js
        cd                        open terminal at location
-       start|stop                docker container   
+       start|stop|state          docker container
+       backup|restore            docker container   
        ssh|exec                  open agorum remote terminal
        messages                  search label in messages
 
@@ -293,6 +294,36 @@ usage:  agorum [cfg] stop container
 
 EOF
 ;;
+
+state)    cat <<EOF
+
+usage:  agorum [cfg] state container
+
+        display state of docker container 
+
+EOF
+;;
+
+backup)    cat <<EOF
+
+usage:  agorum [cfg] backup container
+
+        backup docker container
+        container must be stopped! 
+
+EOF
+;;
+
+restore)    cat <<EOF
+
+usage:  agorum [cfg] restore container
+
+        restore docker container 
+        container must be stopped! 
+
+EOF
+;;
+
 
 ssh)    cat <<EOF
 
@@ -507,6 +538,20 @@ function cifs-umount() {
     mount | grep -q -v "$mount"
 }
 
+function dm-backup() {
+    local source="$HOME/Volumes/docker/mnt/sda1/data/$1/"
+    local target="$DEVROOT/data/$1/"
+    echo "sync volume snapshot to $target ..."
+    [ -d "$source" ] && mkdir -p "$target" && rsync -va --delete "$source" "$target" | egrep -v "^$" 
+}
+
+function dm-restore() {
+    local target="$HOME/Volumes/docker/mnt/sda1/data/$1/"
+    local source="$DEVROOT/data/$1/"
+    echo "sync volume snapshot to $target ..."
+    [ -d "$source " ] && mkdir -p "$target" && rsync -va --delete "$source" "$target" | egrep -v "^$" 
+}
+
 case "$CMD" in
 
 help|--help|-h|-\?|\?) help agorum
@@ -674,10 +719,12 @@ start)            # agorum [config] start [options] container [cmd]
                 running) echo "Container [$container] already running!"
                          ;;
                 exited)  echo "Starting existing container ..."
+                         dm-backup $container
                          docker start $container
                          ;;
                 *)       echo "Creating new container [$container] from image [$DOCKER_IMAGE] ..." 
                          docker run --network=$DOCKER_NETWORK --name=$container -v $DOCKER_MOUNT/$container:$DOCKER_DATA $opts $DOCKER_IMAGE || exit 1
+                         echo "Stop and restart container to create a volume backup!"
                          ;;
                 esac
 
@@ -698,6 +745,13 @@ stop)            # agorum [cfg] stop container
                 [ state=$(checkstate "$container") ] && { docker stop "$container" ; exit 0 ; }
                 echo "ERR: ${container} $state"
                 ;;
+
+state)           # agorum [cfg] state container
+                help state -- "$@"
+                _container=${1:-agorum}
+                _state=$(checkstate "$_container") ; _err=$? 
+                echo "${_container}: $_state"      ; exit $_err
+                ;;   
 
 ssh)            help ssh -- "$@"
                 $TERMINAL "Default" "ssh root@$HOST"
@@ -727,5 +781,20 @@ messages)        # extract messages properties from host/container filesystem
                 # => key (use in template manager's "Search search smart assistent" full text search)
                 # => module (customer project where the string is defined)
                 ;;
+
+backup)         # agorum [cfg] backup container
+                help backup -- "$@"
+                _container=${1:-agorum}
+                _state=$(checkstate "$_container") ; _err=$?
+                [ $_err -eq 0 ] || { dm-backup "$_container" ; exit ; }
+                echo "ERR: $_container $_state"
+                ;;         
+
+restore)         # agorum [cfg] restore container
+                help restore -- "$@"
+                _container=${1:-agorum}
+                [ state=$(checkstate "$_container") ] || { dm-restore "$_container" ; exit ; }
+                echo "ERR: $_container $state"
+                ;;     
 
 esac
