@@ -21,10 +21,9 @@ case "$1" in
      # without subshell creation
      # 
 
-    root|server|default)
-            cd $SERVER 
-            ;;
-    messages)
-            cd /opt/agorum/agorumcore/jboss/server/default/deploy/roi.ear/roiwebui.war/WEB-INF/config/messages
-            ;;
+    root) cd /opt/agorum ;;
+    core|install) cd $INSTALL ;;
+    server|default) cd $SERVER ;;
+    messages) cd $SERVER/deploy/roi.ear/roiwebui.war/WEB-INF/config/messages ;;
+
 esac
