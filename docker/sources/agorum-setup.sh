@@ -1,7 +1,8 @@
 #!/bin/bash
 set -e
 # REV="9_5_0_3-1455"
-REV="9_5_1_4-2876"
+# REV="9_5_1_4-2876"
+REV="10_0_0_3-1477"
 echo "check agorum setup files"
 [ "$1"] && GH_TOKEN="$1"
 [ "$GH_TOKEN" ] || { echo "missing github token" ; exit 1 ; }
