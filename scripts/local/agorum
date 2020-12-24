@@ -55,6 +55,10 @@ function mountpoint() {
     echo $( mount | grep "$host" | grep "$share" | sed 's/.* on \(.*\) (.*/\1/' )
 }
 
+function stamp() {
+    date +"%Y-%m-%d_%H%M%S"    
+}
+
 # external helpers called by xargs
 case "$1" in
 
