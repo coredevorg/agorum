@@ -9,3 +9,4 @@ data/
 docker/sources/*.zip
 docker/sources/*.jar
 docker/sources/*.bin
+scripts/server/jlog
