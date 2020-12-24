@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# process agorum json formatted logs
+# usage: jlog solr validation | jq -r 'select(.sverity==4) .objectId' | sort -u 
+
+AGORUM_ROOT=/opt/agorum
+AGORUM_CORE=$AGORUM_ROOT/agorumcore
+AGORUM_DEFAULT=$AGORUM_CORE/jboss/server/default
+AGORUM_LOG=$AGORUM_DEFAULT/log
+
+PROG=$(basename $0)
+SCRIPT="$0"
+ARGS="$@"
+CMD="$1" ; shift
+
+case "$CMD" in
+solr)   # process SearchEngineStatistic
+        _base="SearchEngineStatistic"
+        SUBCMD="$1" ; shift
+        case "$SUBCMD" in
+        valid*) # process validation failures
+                _log="$_base.IndexStatistic"
+                # check local directory
+                ls ./$_log* 2>/dev/null >/dev/null || cd $AGORUM_LOG
+                echo "$PWD" 1>&2
+                ls -l $_log* 1>&2
+                cat $_log* | jq -r ".propertyMap | select(.objectId>0) | select(.detail | contains(\"Validation failed for field\")) | \
+                                    { objectId, severity, \
+                                      field: .detail | split(\"\n\") | .[1] | split(\": \") | .[1] | split(\", \") | .[0], \
+                                      expected: .detail | split(\"\n\") | .[1] | split(\", \") | .[1] | split(\": \") | .[1], \
+                                      found: .detail | split(\"\n\") | .[1] | split(\", \") | .[2] }"               
+
+        ;;
+        esac
+;;
+
+esac
+
+# json to csv
+# ../../scripts/server/jlog solr valid | jq 'select(.severity==3)' | jq -s . | jq -r '(map(keys) | add | unique) as $cols | map(. as $row | $cols | map($row[.])) as $rows | $cols, $rows[] | @csv'
