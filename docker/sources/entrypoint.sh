@@ -42,6 +42,7 @@ function sigterm_handler() {
 [ -f /opt/agorum/data/.done ] || {
     log echo "initalize data volume with data.install"
     cp -r /opt/agorum/data.install/. /opt/agorum/data
+    ln -sf /opt/agorum/agorumcore/scripts/agorumcore /opt/agorum/data/scripts
 }
 
 
