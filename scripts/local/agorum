@@ -795,6 +795,6 @@ restore)         # agorum [cfg] restore container
                 _container=${1:-agorum}
                 [ state=$(checkstate "$_container") ] || { dm-restore "$_container" ; exit ; }
                 echo "ERR: $_container $state"
-                ;;     
+                ;;
 
 esac
