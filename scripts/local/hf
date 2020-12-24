@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# connect VPN: use networksetup (with credentials from VPN config)
+
+HF_NET="192.168.16"
+HF_VPN="HF"
+HF_STAT=$(networksetup -showpppoestatus "$HF_VPN")
+HF_GATE=$(netstat -rn | awk '$3 == "UH" && $4 == "ppp0" { print $2 }')
+
+PROG=$(basename $0)
+CMD=$PROG ; [ "$1" ] && CMD="$PROG-$1"
+case "$CMD" in
+
+hf-up)      # connect to VPN gateway
+            [ "$HF_STAT" != "connected" ] && networksetup -connectpppoeservice "$HF_VPN"
+            for counter in 0 1 2 3 4 5 6 7 8 9 
+            do  sleep 1
+                HF_STAT=$(networksetup -showpppoestatus "$HF_VPN")
+                [ "$HF_STAT" == "connected" ] && break
+            done
+            [ "$HF_STAT" == "connected" ] && {
+                HF_GATE=$(netstat -rn | awk '$3 == "UH" && $4 == "ppp0" { print $2 }')
+                sudo route add -net $HF_NET.0/24 $HF_GATE
+            }
+            ;;
+
+hf-down)    # disconnect from VPN gateway
+            [ "$HF_STAT" == "connected" ] && networksetup -disconnectpppoeservice "$HF_VPN"
+            # route automatically deleted if VPN interface goes down
+            ;;
+
+hf-stat)    # show status
+            echo "$HF_VPN $HF_STAT"
+            netstat -rn | grep "$HF_NET "
+            ;;
+
+hf-dev)     hf up ; ssh hf-dev ;;
+hf-prod)    hf up ; ssh hf-prod ;; 
+
+esac
