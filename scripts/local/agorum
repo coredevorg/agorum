@@ -55,8 +55,23 @@ function mountpoint() {
     echo $( mount | grep "$host" | grep "$share" | sed 's/.* on \(.*\) (.*/\1/' )
 }
 
-function stamp() {
-    date +"%Y-%m-%d_%H%M%S"    
+function getstat() {
+    local file="$1"
+    local attr="st_$2"
+    local st_dev st_ino st_mode st_nlink st_uid st_gid st_rdev st_size st_atime st_mtime st_ctime st_birthtime st_blksize st_blocks st_flags
+    [ -e "$file" ] && {
+        eval $(stat -s "$file")
+    } || echo "[$file not found!]"
+    echo "${!attr}"  
+}
+
+function unix2date() {
+    local unix="$1"
+    local format=${2:-"%Y-%m-%d_%H%M%S"}
+    local opt="-r" # BSD Unix
+    # TODO: check unix flavour
+    # local opt="-d" # Linux
+    date -r "$1" +"$format"
 }
 
 # external helpers called by xargs
@@ -371,7 +386,8 @@ fi
 DOCKER_IMAGE=agorum
 DOCKER_NETWORK=office
 DOCKER_DATA=/opt/agorum/data
-DOCKER_MOUNT=/mnt/sda1/data
+DOCKER_VOLUME=/mnt/sda1/data
+DOCKER_ROOT=$HOME/Volumes/docker
 
 # set parms from agorum[-config].cfg
 if [ -f "$CFGROOT/agorum-${1}.cfg" ]
@@ -543,17 +559,50 @@ function cifs-umount() {
 }
 
 function dm-backup() {
-    local source="$HOME/Volumes/docker/mnt/sda1/data/$1/"
-    local target="$DEVROOT/data/$1/"
-    echo "sync volume snapshot to $target ..."
-    [ -d "$source" ] && mkdir -p "$target" && rsync -va --delete "$source" "$target" | egrep -v "^$" 
+    local source="$DOCKER_ROOT/$DOCKER_VOLUME/$1"
+    local target="$DEVROOT/data/$1"
+    local statefile="$source/.state"
+    local state stamp mtime
+    [ -f "$statefile" ] && {
+        state=$(tail -1 "$statefile")
+        [ "$state" == "stopped" ] && {
+            mtime=$(getstat "$statefile" mtime)
+            stamp=$(unix2date $mtime)
+            echo "$stamp" > "$source/.backup"
+            echo "sync volume snapshot $stamp to $target ..."
+            [ -d "$source" ] && mkdir -p "$target" && \
+                $DRYRUN rsync -va --delete --no-links --exclude ".DS_Store" --exclude "._*" \
+                "$source/" "$target/" | egrep -v "^$"
+            return 0
+        }
+        echo "ERR: invalid state [$state]" ; return 2
+    }
+    echo "ERR: $statefile not found!" ; return 1
 }
 
 function dm-restore() {
-    local target="$HOME/Volumes/docker/mnt/sda1/data/$1/"
-    local source="$DEVROOT/data/$1/"
-    echo "sync volume snapshot to $target ..."
-    [ -d "$source " ] && mkdir -p "$target" && rsync -va --delete "$source" "$target" | egrep -v "^$" 
+    local target="$DOCKER_ROOT/$DOCKER_VOLUME/$1"
+    local source="$DEVROOT/data/$1"
+    local stamp
+    local statefile="$target/.state"
+    local backup="$source/.backup"
+    local state stamp
+    [ -f "$statefile" ] && {
+        state=$(tail -1 "$statefile")
+        [ "$state" == "stopped" ] && {
+            [ -f "$backup" ] && {
+                stamp=$(cat "$backup")
+                echo "sync volume snapshot $stamp to $target ..."
+                # [ -d "$source" ] && mkdir -p "$target" && 
+                $DRYRUN rsync -va --delete --no-links --exclude ".DS_Store" --exclude "._*" \
+                "$source/" "$target/" | egrep -v "^$"
+                return 0
+            }
+            echo "ERR: $backup not found!" ; return 3
+       }
+       echo "ERR: invalid state [$state]" ; return 2
+    }
+    echo "ERR: $statefile not found!" ; return 1
 }
 
 case "$CMD" in
@@ -727,7 +776,7 @@ start)            # agorum [config] start [options] container [cmd]
                          docker start $container
                          ;;
                 *)       echo "Creating new container [$container] from image [$DOCKER_IMAGE] ..." 
-                         docker run --network=$DOCKER_NETWORK --name=$container -v $DOCKER_MOUNT/$container:$DOCKER_DATA $opts $DOCKER_IMAGE || exit 1
+                         docker run --network=$DOCKER_NETWORK --name=$container -v $DOCKER_VOLUME/$container:$DOCKER_DATA $opts $DOCKER_IMAGE || exit 1
                          echo "Stop and restart container to create a volume backup!"
                          ;;
                 esac
@@ -797,7 +846,8 @@ backup)         # agorum [cfg] backup container
 restore)         # agorum [cfg] restore container
                 help restore -- "$@"
                 _container=${1:-agorum}
-                [ state=$(checkstate "$_container") ] || { dm-restore "$_container" ; exit ; }
+                _state=$(checkstate "$_container") ; _err=$?
+                [ $_err -eq 0 ] || { dm-restore "$_container" ; exit ; }
                 echo "ERR: $_container $state"
                 ;;
 
