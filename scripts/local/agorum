@@ -60,10 +60,8 @@ function getstat() {
     local file="$1"
     local attr="st_$2"
     local st_dev st_ino st_mode st_nlink st_uid st_gid st_rdev st_size st_atime st_mtime st_ctime st_birthtime st_blksize st_blocks st_flags
-    [ -e "$file" ] && {
-        eval $(stat -s "$file")
-    } || echo "[$file not found!]"
-    echo "${!attr}"  
+    [ -e "$file" ] || { echo "[$file not found!]" 1>&2 ; echo "" ; return 1 ; }
+    eval $(stat -s "$file") && echo "${!attr}"  
 }
 
 function unix2date() {
@@ -686,8 +684,11 @@ project)        # agorum [cfg] project [-i] <project>
                         ln -sf "$GIT_WORKTREE" .
                         export GIT_DIR="$(pwd)/.git"
                         $IDECMD "$GIT_WORKTREE"
-                    } || echo "project source directory [$GIT_WORKTREE] not found!"
-                } || echo "project work directory [$WORKDIR/$project] not found!"
+                        exit 0
+                    }
+                    echo "project source directory [$GIT_WORKTREE] not found!" ; exit 2
+                }
+                echo "project work directory [$WORKDIR/$project] not found!" ; exit 1
                 ;;
 
 develop)        # agorum [cfg] develop
