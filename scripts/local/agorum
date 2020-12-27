@@ -568,10 +568,12 @@ function cifs-umount() {
 
 function dm-backup() { 
     local sub ; case "$1" in -s) sub="snapshot" ; shift ;; esac
-    local source="$DOCKER_ROOT/$DOCKER_VOLUME/$1"
+    local source="${DOCKER_ROOT}${DOCKER_VOLUME}/$1"
     local target="$DEVROOT/data/$1"
     local statefile="$source/.state"
     local state stamp mtime
+    # agorum data only
+    [ -f "$source/.done" ] || return 0
     [ -f "$statefile" ] && {
         state=$(tail -1 "$statefile")
         [ "$state" == "stopped" ] && {
