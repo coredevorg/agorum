@@ -568,7 +568,8 @@ function cifs-umount() {
     mount | grep -q -v "$mount"
 }
 
-function dm-backup() {
+function dm-backup() { 
+    local sub ; case "$1" in -s) sub="snapshot" ; shift ;; esac
     local source="$DOCKER_ROOT/$DOCKER_VOLUME/$1"
     local target="$DEVROOT/data/$1"
     local statefile="$source/.state"
@@ -579,6 +580,7 @@ function dm-backup() {
             mtime=$(getstat "$statefile" mtime)
             stamp=$(unix2date $mtime)
             echo "$stamp" > "$source/.backup"
+            [ "$sub" ] || sub="$stamp" ; target="$target/$sub"
             echo "sync volume snapshot $stamp to $target ..."
             [ -d "$source" ] && mkdir -p "$target" && \
                 $DRYRUN rsync -va --delete --no-links --exclude ".DS_Store" --exclude "._*" \
@@ -591,7 +593,7 @@ function dm-backup() {
 }
 
 function dm-restore() {
-    local target="$DOCKER_ROOT/$DOCKER_VOLUME/$1"
+    local target="${DOCKER_ROOT}${DOCKER_VOLUME}/$1"
     local source="$DEVROOT/data/$1"
     local stamp
     local statefile="$target/.state"
@@ -782,7 +784,7 @@ start)          # agorum [config] start [options] container [cmd]
                 running) echo "Container [$container] already running!"
                          ;;
                 exited)  echo "Starting existing container ..."
-                         dm-backup $container
+                         dm-backup -s $container
                          $DC start $container
                          ;;
                 *)       echo "Creating new container [$container] from image [$DOCKER_IMAGE] ..." 
@@ -804,16 +806,17 @@ start)          # agorum [config] start [options] container [cmd]
 
 stop)           # agorum [cfg] stop container
                 help stop -- "$@"
-                container=${1:-agorum}
-                [ state=$(checkstate "$container") ] && { $DC stop "$container" ; exit 0 ; }
-                echo "ERR: ${container} $state"
+                _container=${1:-agorum}
+                _state=$(checkstate "$_container") ; _err=$? 
+                [ $_err -eq 0 ] && { $DC stop "$_container" ; exit 0 ; }
+                echo "ERR: $_container $_state"
                 ;;
 
 state)          # agorum [cfg] state container
                 help state -- "$@"
                 _container=${1:-agorum}
                 _state=$(checkstate "$_container") ; _err=$? 
-                echo "${_container}: $_state"      ; exit $_err
+                echo "$_container: $_state"      ; exit $_err
                 ;;   
 
 ssh)            help ssh -- "$@"
@@ -825,7 +828,7 @@ exec)           # agorum [cfg] exec container [args]
                 _container=${1:-agorum} ; shift
                 _state=$(checkstate "$_container") ; _err=$? 
                 [ $_err -eq 0 ] && { de $_container "$@" ; exit ; }
-                echo "${_container}: $_state"
+                echo "$_container: $_state"
                 ;;
 
 shell)          # agorum [cfg] shell container [args]
@@ -858,9 +861,10 @@ messages)        # extract messages properties from host/container filesystem
 
 backup)         # agorum [cfg] backup container
                 help backup -- "$@"
+                case "$1" in -?) _opt="$1" ; shift ;; esac
                 _container=${1:-agorum}
                 _state=$(checkstate "$_container") ; _err=$?
-                [ $_err -eq 0 ] || { dm-backup "$_container" ; exit ; }
+                [ $_err -eq 0 ] || { dm-backup $_opt "$_container" ; exit ; }
                 echo "ERR: $_container $_state"
                 ;;         
 
