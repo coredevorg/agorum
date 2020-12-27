@@ -17,6 +17,7 @@ SCRIPT="$0"
 ARGS="$@"
 CFGROOT="$HOME/.local/etc"
 IDECMD="vc -n"
+DC='ssh root@docker docker'
 
 function realpath() { ( cd "$1" && pwd -P ) ; }
 REALPATH="$(readlink $SCRIPT)" || REALPATH="$SCRIPT"
@@ -39,7 +40,7 @@ function checkopts() {
 
 function checkstate() {
     local container="$1" ret 
-    local state=$(docker inspect $container 2>/dev/null | jq -r .[0].State.Status)
+    local state=$($DC inspect $container 2>/dev/null | jq -r .[0].State.Status)
     case "$state" in
     running) ret=0;;
     exited)  ret=1;;
@@ -159,7 +160,7 @@ usage: agorum [config] command [options]
        cd                        open terminal at location
        start|stop|state          docker container
        backup|restore            docker container   
-       ssh|exec                  open agorum remote terminal
+       ssh|exec|shell            open agorum remote terminal
        messages                  search label in messages
 
 
@@ -356,6 +357,15 @@ EOF
 exec)    cat <<EOF
 
 usage:  agorum [cfg] exec [cmd]
+
+        run command/bash at agorum host 
+
+EOF
+;;
+
+shell)    cat <<EOF
+
+usage:  agorum [cfg] shell [cmd]
 
         run command/bash at agorum host 
 
@@ -763,25 +773,25 @@ find)            help find -- "$@"
                 xargs -0 -I{} $SCRIPT _find "{}" "$1"
                 ;;
 
-start)            # agorum [config] start [options] container [cmd]
+start)          # agorum [config] start [options] container [cmd]
                 help start -- "$@"
                 container=${1:-agorum}
                 opts="-d"
-                state=$(docker inspect $container 2>/dev/null | jq -r .[0].State.Status)
+                state=$(checkstate "$container")
                 case "$state" in
                 running) echo "Container [$container] already running!"
                          ;;
                 exited)  echo "Starting existing container ..."
                          dm-backup $container
-                         docker start $container
+                         $DC start $container
                          ;;
                 *)       echo "Creating new container [$container] from image [$DOCKER_IMAGE] ..." 
-                         docker run --network=$DOCKER_NETWORK --name=$container -v $DOCKER_VOLUME/$container:$DOCKER_DATA $opts $DOCKER_IMAGE || exit 1
+                         $DC run --network=$DOCKER_NETWORK --name=$container -v $DOCKER_VOLUME/$container:$DOCKER_DATA $opts $DOCKER_IMAGE || exit 1
                          echo "Stop and restart container to create a volume backup!"
                          ;;
                 esac
 
-                ip=$(docker inspect $container 2>/dev/null | jq -r .[0].NetworkSettings.Networks.$DOCKER_NETWORK.IPAddress)
+                ip=$($DC inspect $container 2>/dev/null | jq -r .[0].NetworkSettings.Networks.$DOCKER_NETWORK.IPAddress)
                 [ "$ip " ] && {
                     echo "$ip"
                     # generate local host entry
@@ -792,14 +802,14 @@ start)            # agorum [config] start [options] container [cmd]
                 }
                 ;;
 
-stop)            # agorum [cfg] stop container
+stop)           # agorum [cfg] stop container
                 help stop -- "$@"
                 container=${1:-agorum}
-                [ state=$(checkstate "$container") ] && { docker stop "$container" ; exit 0 ; }
+                [ state=$(checkstate "$container") ] && { $DC stop "$container" ; exit 0 ; }
                 echo "ERR: ${container} $state"
                 ;;
 
-state)           # agorum [cfg] state container
+state)          # agorum [cfg] state container
                 help state -- "$@"
                 _container=${1:-agorum}
                 _state=$(checkstate "$_container") ; _err=$? 
@@ -810,13 +820,24 @@ ssh)            help ssh -- "$@"
                 $TERMINAL "Default" "ssh root@$HOST"
                 ;;
 
-exec)            # agorum [cfg] exec container [args]  
-                help exec -- "$@"
-                container=${1:-agorum} ; shift
-                exec_args="$@"
-                [ "$1" ] || exec_args="bash" 
-                [ state=$(checkstate "$container") ] && $TERMINAL "Default" "docker exec -it \"$container\" $exec_args" ||
-                echo "${container}: $state"
+exec)           # agorum [cfg] exec container [args]  
+                help "exec" -- "$@"
+                _container=${1:-agorum} ; shift
+                _state=$(checkstate "$_container") ; _err=$? 
+                [ $_err -eq 0 ] && { de $_container "$@" ; exit ; }
+                echo "${_container}: $_state"
+                ;;
+
+shell)          # agorum [cfg] shell container [args]
+                help "shell" -- "$@"
+                _container=${1:-agorum} ; shift
+                _state=$(checkstate "$_container") ; _err=$?
+                [ $_err -eq 0 ] && {
+                    exec_args="$@"
+                    [ "$1" ] || exec_args="bash" 
+                    [ state=$(checkstate "$_container") ] && exec $TERMINAL "Default" "de -it \"$_container\" $exec_args"
+                }
+                echo "${_container}: $_state"
                 ;;
 
 messages)        # extract messages properties from host/container filesystem
@@ -824,7 +845,7 @@ messages)        # extract messages properties from host/container filesystem
                 container=${1:-agorum}
                 target="$DEVROOT/messages/$container"
                 # create messages archive in volume container
-                docker exec -it $HOST bash -c "cd /opt/agorum/agorumcore/jboss/server/default/deploy/roi.ear/roiwebui.war/WEB-INF/config/messages && tar cvzf /opt/agorum/data/messages.tgz ."
+                de $container "bash -c \"cd /opt/agorum/agorumcore/jboss/server/default/deploy/roi.ear/roiwebui.war/WEB-INF/config/messages && tar cvzf /opt/agorum/data/messages.tgz .\""
                 [ -d "$target" ] || mkdir -p "$target"
                 # move to local messages directory and decode unicod escapes \u00.. 
                 ssh root@docker "cat /mnt/sda1/data/$container/messages.tgz" | tar xvzf - -C "$target"
