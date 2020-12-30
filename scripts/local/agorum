@@ -593,28 +593,32 @@ function dm-backup() {
 }
 
 function dm-restore() {
+    local sub ; case "$1" in -s) sub="snapshot" ; shift ;; esac
     local target="${DOCKER_ROOT}${DOCKER_VOLUME}/$1"
     local source="$DEVROOT/data/$1"
-    local stamp
+    cd "$source" || { echo "ERR: source directory [$source] not found!" ; return 1 ; } 
+    [ "$sub" ] || sub="$(ls -tr | tail -1)"
+    source="$source/$sub"
+    [ -d "$source" ] || { echo "ERR: backup directory [$source] not found!" ; return 2 ; }
     local statefile="$target/.state"
     local backup="$source/.backup"
-    local state stamp
+    local stamp
     [ -f "$statefile" ] && {
         state=$(tail -1 "$statefile")
         [ "$state" == "stopped" ] && {
             [ -f "$backup" ] && {
                 stamp=$(cat "$backup")
-                echo "sync volume snapshot $stamp to $target ..."
+                echo "sync volume backup $stamp to $target ..."
                 # [ -d "$source" ] && mkdir -p "$target" && 
                 $DRYRUN rsync -va --delete --no-links --exclude ".DS_Store" --exclude "._*" \
                 "$source/" "$target/" | egrep -v "^$"
                 return 0
             }
-            echo "ERR: $backup not found!" ; return 3
+            echo "ERR: $backup not found!" ; return 5
        }
-       echo "ERR: invalid state [$state]" ; return 2
+       echo "ERR: invalid state [$state]" ; return 4
     }
-    echo "ERR: $statefile not found!" ; return 1
+    echo "ERR: $statefile not found!" ; return 3
 }
 
 case "$CMD" in
@@ -901,10 +905,11 @@ backup)         # agorum [cfg] backup container
 
 restore)         # agorum [cfg] restore container
                 help restore -- "$@"
-                _container=${1:-agorum}
+                case "$1" in -?) _opt="$1" ; shift ;; esac
+                _container=${1:-agorum} ; shift
                 _state=$(checkstate "$_container") ; _err=$?
-                [ $_err -eq 0 ] || { dm-restore "$_container" ; exit ; }
-                echo "ERR: $_container $state"
+                [ $_err -eq 0 ] || { dm-restore $_opt "$_container" "$@" ; exit ; }
+                echo "ERR: $_container $_state"
                 ;;
 
 esac
