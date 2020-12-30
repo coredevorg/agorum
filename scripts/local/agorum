@@ -805,6 +805,28 @@ start)          # agorum [config] start [options] container [cmd]
                     echo "$ip $container.$DOCKER_NETWORK.local $container" >> $tmp
                     sudo cp $tmp /etc/hosts
                 }
+
+                _data="${DOCKER_ROOT}${DOCKER_VOLUME}/$_container"
+                _ac_state=$(cat "$_data/.state")
+
+                [ "$_ac_state" != "running" ] && {
+                    echo -n "waiting for agorum startup " ; _counter=0
+                    while [ $_counter -lt $_timeout ]
+                    do
+                        _state=$(cat "$_data/.state")
+                        [ "$_ac_state" == "running" ] && {
+                            echo " OK"
+                            $DC logs $_container | tail -2
+                            break    
+                        }
+                        echo -n "." ; sleep 1 ; ((_counter++))    
+                    done
+                    [ "$_ac_state" != "running" ] && {
+                        echo ""
+                        echo "ERR: agorum startup failed!"
+                        $DC logs $_container
+                    }
+                }
                 ;;
 
 stop)           # agorum [cfg] stop container
