@@ -787,21 +787,23 @@ start)          # agorum [config] start [options] container [cmd]
                 _container=${1:-agorum}
                 _opts="-d"
                 _dc_state=$(checkstate "$_container")
+                _dc_image=$($DC inspect "$_container" | jq -r '.[0].Config.Image')
                 _timout=0
                 case "$_dc_state" in
                 running) # echo "Container [$_container] already running!"
                          $DC logs $_container | tail -2
-                         _timeout=0
                          ;;
                 exited)  echo "Starting existing container ..."
-                         dm-backup -s $_container
+                         [ "$_dc_image" == "agorum" ] && { 
+                             dm-backup -s $_container
+                            _timeout=90
+                         }
                          $DC start $_container
-                         _timeout=60
                          ;;
-                *)       echo "Creating new container [$_container] from image [$DOCKER_IMAGE] ..." 
+                *)       echo "Creating new agorum container [$_container] from image [$DOCKER_IMAGE] ..." 
                          $DC run --network=$DOCKER_NETWORK --name=$_container -v $DOCKER_VOLUME/$_container:$DOCKER_DATA $_opts $DOCKER_IMAGE || exit 1
                          echo "Stop and restart container to create a volume backup!"
-                         _timeout=120
+                         _timeout=180
                          ;;
                 esac
 
@@ -819,7 +821,7 @@ start)          # agorum [config] start [options] container [cmd]
                 _data="${DOCKER_ROOT}${DOCKER_VOLUME}/$_container"
                 _ac_state=$(cat "$_data/.state")
 
-                [ "$_ac_state" != "running" ] && {
+                [ "$_dc_image" == "agorum" ] && [ "$_ac_state" != "running" ] && {
                     echo -n "waiting for agorum startup " ; _counter=0
                     while [ $_counter -lt $_timeout ]
                     do
