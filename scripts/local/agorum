@@ -787,7 +787,7 @@ start)          # agorum [config] start [options] container [cmd]
                 _container=${1:-agorum}
                 _opts="-d"
                 _dc_state=$(checkstate "$_container")
-                _dc_image=$($DC inspect "$_container" | jq -r '.[0].Config.Image')
+                _dc_image=$($DC inspect "$_container" 2>/dev/null | jq -r '.[0].Config.Image')
                 _timout=0
                 case "$_dc_state" in
                 running) # echo "Container [$_container] already running!"
@@ -802,6 +802,7 @@ start)          # agorum [config] start [options] container [cmd]
                          ;;
                 *)       echo "Creating new agorum container [$_container] from image [$DOCKER_IMAGE] ..." 
                          $DC run --network=$DOCKER_NETWORK --name=$_container -v $DOCKER_VOLUME/$_container:$DOCKER_DATA $_opts $DOCKER_IMAGE || exit 1
+                         _dc_image="$DOCKER_IMAGE"
                          echo "Stop and restart container to create a volume backup!"
                          _timeout=180
                          ;;
@@ -913,5 +914,12 @@ restore)         # agorum [cfg] restore container
                 [ $_err -eq 0 ] || { dm-restore $_opt "$_container" "$@" ; exit ; }
                 echo "ERR: $_container $_state"
                 ;;
+
+ps|run*)        # show active container
+                $DC ps
+                ;;
+
+ls|cont*)       # show container images
+                $DC ps -a
 
 esac
