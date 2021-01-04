@@ -6,6 +6,7 @@ vm/
 develop/
 source/
 data/
+demo/
 docker/sources/*.zip
 docker/sources/*.jar
 docker/sources/*.bin
