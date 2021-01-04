@@ -830,6 +830,7 @@ start)          # agorum [config] start [options] container [cmd]
                         [ "$_ac_state" == "running" ] && {
                             echo " OK"
                             $DC logs $_container | tail -2
+                            echo "$_hostentry" >> $tmp
                             break    
                         }
                         echo -n "." ; sleep 1 ; ((_counter++))    
@@ -838,7 +839,8 @@ start)          # agorum [config] start [options] container [cmd]
                         echo ""
                         echo "ERR: agorum startup failed!"
                         $DC logs $_container
-                    }
+                        echo "$_hostentry" >> $tmp
+                   }
                 }
                 ;;
 
@@ -921,5 +923,26 @@ ps|run*)        # show active container
 
 ls|cont*)       # show container images
                 $DC ps -a
+                ;;
+
+rm|remove)      # remove container image
+                # help remove -- "$@"
+                case "$1" in -?) _opt="$1" ; shift ;; esac
+                _container=${1:-agorum} ; shift
+                _state=$(checkstate "$_container") ; _err=$?
+                [ $_err -eq 1 ] && { $DC rm "$_container" ; exit ; }
+                echo "ERR: $_container $_state"
+                ;;
+
+purge)          # remove container data
+                # help purge -- "$@"
+                case "$1" in -?) _opt="$1" ; shift ;; esac
+                _container=${1:-agorum} ; shift
+                _state=$(checkstate "$_container") ; _err=$?
+                echo $_opt
+                echo $_container
+                echo "$_state ($_err)"
+
+                ;;         
 
 esac
