@@ -795,7 +795,7 @@ start)          # agorum [config] start [options] container [cmd]
                          ;;
                 exited)  echo "Starting existing container ..."
                          [ "$_dc_image" == "agorum" ] && { 
-                             dm-backup -s $_container
+                             dm-backup $_container
                             _timeout=90
                          }
                          $DC start $_container
