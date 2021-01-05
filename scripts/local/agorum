@@ -794,9 +794,15 @@ start)          # agorum [config] start [options] container [cmd]
                          $DC logs $_container | tail -2
                          ;;
                 exited)  echo "Starting existing container ..."
-                         [ "$_dc_image" == "agorum" ] && { 
-                             dm-backup $_container
-                            _timeout=90
+                         [ "$_dc_image" == "agorum" ] && {
+                            _timeout=180
+                            _data="${DOCKER_ROOT}${DOCKER_VOLUME}/$_container"
+                            _ac_state=$(cat "$_data/.state")
+                            [ "$_ac_state" == "stopped" ] && {
+                                # regular restart after graceful shutdown
+                                dm-backup $_container
+                                _timeout=90
+                            }
                          }
                          $DC start $_container
                          ;;
