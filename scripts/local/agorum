@@ -830,7 +830,7 @@ start)          # agorum [config] start [options] container [cmd]
                         [ "$_ac_state" == "running" ] && {
                             echo " OK"
                             $DC logs $_container | tail -2
-                            echo "$_hostentry" >> $tmp
+                            echo "$_hostentry"
                             break    
                         }
                         echo -n "." ; sleep 1 ; ((_counter++))    
@@ -839,7 +839,7 @@ start)          # agorum [config] start [options] container [cmd]
                         echo ""
                         echo "ERR: agorum startup failed!"
                         $DC logs $_container
-                        echo "$_hostentry" >> $tmp
+                        echo "$_hostentry"
                    }
                 }
                 ;;
