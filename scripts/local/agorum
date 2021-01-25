@@ -674,8 +674,12 @@ project)        # agorum [cfg] project [-i] <project>
                 # GIT_WORKTREE: [MOUNT] / [Administration/customers/]<project>
 
                 help project -- "$@"
-
                 checkopts "i" "DEV_OPTS" "$@" ; shift $?
+                
+                #_container=${1:-agorum}
+                #_state=$(checkstate "$_container") ; _err=$? 
+                #echo "$_container: $_state"      ; exit $_err
+
                 project="$1"
 
                 [ "$DEV_OPTS_i" ] && {
@@ -683,7 +687,7 @@ project)        # agorum [cfg] project [-i] <project>
                     mkdir -p "$WORKDIR" && cd "$WORKDIR" 
                     # TODO: project link, git init, ...
                 }
-
+                
                 cd "$WORKDIR/$project" && [ -d ".git" ] && {
                     GIT_WORKTREE=$( git config --local --list | grep "core.worktree" | cut -d'=' -f2 )                    
                     [ -d "$GIT_WORKTREE" ] && {
@@ -771,7 +775,7 @@ cd)                # open terminal at spezified directory
                 $TERMINAL "Default" "cd \"$_DIR\""
                 ;;
 
-query)            help query -- "$@"
+query)          help query -- "$@"
                 find . -type f \( -iname "*_config.json" ! -iname ".*" \) -print0 | \
                 xargs -0 -I{} $SCRIPT _query "{}" "$@"
                 # xargs -0 -I{} sh -c "echo '{}' && jq $1 '{}' | egrep -v '({|})' | sed 's/\"//g' ; echo"
