@@ -519,8 +519,8 @@ function cifs-mount() {
     set -- ${dms//\// }
     local host="$1"
     dms="$2"
-    local mount="${MOUNT}/${host}/${dms}"
-    local link="$host [$dms]"
+    local mount="${MOUNT}/${username}/${host}/${dms}"
+    local link="${username}@$host [$dms]"
 
     [ -d "$mount" ] || mkdir -p "$mount"
     mount | grep -q "$mount" || {
@@ -545,13 +545,13 @@ function cifs-mount() {
 function cifs-umount() {
 
     local dms=${1:-$DMS}
-    # local username=${2:-$USERNAME}
+    local username=${2:-$USERNAME}
     # local password=${3:-$PASSWORD}
     set -- ${dms//\// }
     local host="$1"
     dms="$2"
-    local mount="${MOUNT}/${host}/${dms}"
-    local link="$host [$dms]"
+    local mount="${MOUNT}/${username}/${host}/${dms}"
+    local link="${username}@$host [$dms]"
     local ret=0
 
     mount | grep -q "$mount" && {
