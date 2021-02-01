@@ -17,7 +17,9 @@ SCRIPT="$0"
 ARGS="$@"
 CFGROOT="$HOME/.local/etc"
 IDECMD="vc -n"
-DC='ssh root@docker docker'
+#IDECMD="webstorm"
+DC="ssh root@docker docker"
+VMRUN='/Applications/VMware Fusion.app/Contents/Public/vmrun'
 
 function realpath() { ( cd "$1" && pwd -P ) ; }
 REALPATH="$(readlink $SCRIPT)" || REALPATH="$SCRIPT"
@@ -476,13 +478,13 @@ function vm-start() {
     local vmx="${VM_AGORUM_ROOT}/$vm.vmwarevm/$vm.vmx"
     local counter=0 stamp=$(date '+%Y-%m-%d_%H%M%S')
 
-    vmrun list | grep -q $vmx || {
+    "$VMRUN" list | grep -q $vmx || {
         echo "starting [$vm] ..."
         [ "$VM_START_OPT_s" == "true" ] && {
             echo "creating snapshop [$stamp]"
-            $DRYRUN vmrun snapshot "$vmx" "$stamp" || exit 
+            $DRYRUN "$VMRUN" snapshot "$vmx" "$stamp" || exit 
         }
-        $DRYRUN vmrun start "$vmx" nogui || exit
+        $DRYRUN "$VMRUN" start "$vmx" nogui || exit
         echo -n "waiting for host ."
         until ping -c1 -t1 -W1 $host >/dev/null 2>&1
         do
@@ -503,10 +505,10 @@ function vm-stop() {
     local host=${2:-$HOST}
     local vmx="${VM_AGORUM_ROOT}/$vm.vmwarevm/$vm.vmx"
 
-    vmrun list | grep -q $vmx && {
+    "$VMRUN" list | grep -q $vmx && {
         # umount agorum
         ssh root@$host "agorum stop"
-        vmrun stop "$vmx"
+        "$VMRUN" stop "$vmx"
     }
 }
 
@@ -688,7 +690,7 @@ project)        # agorum [cfg] project [-i] <project>
                     # TODO: project link, git init, ...
                 }
                 
-                cd "$WORKDIR/$project" && [ -d ".git" ] && {
+                cd "$WORKDIR/$project" 2>/dev/null && [ -d ".git" ] && {
                     GIT_WORKTREE=$( git config --local --list | grep "core.worktree" | cut -d'=' -f2 )                    
                     [ -d "$GIT_WORKTREE" ] && {
                         ln -sf "$GIT_WORKTREE" .
@@ -735,7 +737,7 @@ shutdown)        # agorum [cfg] shutdown vm host share project workdir
 
 status)            # agorum [cfg] status
                 # TODO: complete rework required: docker, webdav, project, ...
-                _VMX=$(vmrun list | grep $VM)
+                _VMX=$("$VMRUN" list | grep $VM)
                 [ "$_VMX" ] && _MOUNT=$(mount | grep $DMS)
 
 cat <<EOF
@@ -788,6 +790,7 @@ find)            help find -- "$@"
 
 start)          # agorum [config] start [options] container [cmd]
                 help start -- "$@"
+                dm mount # make sure, docker is mounted
                 _container=${1:-agorum}
                 _opts="-d"
                 _dc_state=$(checkstate "$_container")
@@ -898,13 +901,19 @@ shell)          # agorum [cfg] shell container [args]
 messages)        # extract messages properties from host/container filesystem
                 help messages -- "@" 
                 container=${1:-agorum}
-                target="$DEVROOT/messages/$container"
+                target="$DEVROOT/develop/$container/config/[Messages]"
                 # create messages archive in volume container
                 de $container "bash -c \"cd /opt/agorum/agorumcore/jboss/server/default/deploy/roi.ear/roiwebui.war/WEB-INF/config/messages && tar cvzf /opt/agorum/data/messages.tgz .\""
                 [ -d "$target" ] || mkdir -p "$target"
                 # move to local messages directory and decode unicod escapes \u00.. 
                 ssh root@docker "cat /mnt/sda1/data/$container/messages.tgz" | tar xvzf - -C "$target"
-                cd "$target" && find . -name "*.properties" -exec ../decode.py {} \;
+                cd "$target" && find . -name "*.properties" -exec ../../../decode.py {} \;
+                _workspace="$HOME/Develop/agorum/mnt/roi/$container/cdev_roi/workspace/cdev.core"
+                [ -d "$_workspace" ] && {
+                    rsync -va --delete "$target"/ "$_workspace/[Messages]/"
+                    [ -d "$_workspace/[AsaConfig]" ] && rsync -va --delete "$_workspace/[AsaConfig]/" "$(dirname $target)/[AsaConfig]/" 
+                } 
+
                 # search translation string
                 # cd $target && grep -ri "Search" *
                 # => key (use in template manager's "Search search smart assistent" full text search)
