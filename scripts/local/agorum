@@ -75,6 +75,19 @@ function unix2date() {
     date -r "$1" +"$format"
 }
 
+function resolve() {
+    ping -q -c1 -t1 -W1 "$1" >/dev/null 2>&1 || return $?
+    ping -q -c1 -W1 -t1 "$1" 2>/dev/null | head -1 | sed 's/^PING.*(\(.*\)).*$/\1/'
+}
+
+function reverse() {
+    [[ $1 == 192.168.* ]] && {
+        awk -v addr="$1" '{ if ( $1 == addr ) print $NF }' /etc/hosts | tail -1
+        return
+    }
+    echo "$1"
+}
+
 # external helpers called by xargs
 case "$1" in
 
@@ -512,6 +525,47 @@ function vm-stop() {
     }
 }
 
+function firefox() {
+
+    local container=${1:-agorum} ; shift
+    local user=${1:-roi}
+    local bin="/Applications/Firefox.app/Contents/MacOS/firefox"
+    local lib="$HOME/Library/Application Support/Firefox"
+    local url="http://${container}.office.local"
+    local profile="${container}-${user}"
+    local opts="--new-window -P ${profile}"
+    local ini="$lib/profiles.ini"
+     ps | grep firefox | egrep -q "P ${profile} .*${url}" || {
+         # new instance
+         [ -d "$lib/Profiles/$profile" ] || {
+             # new profile
+             rsync -a "$lib/Profiles/agorum/" "$lib/Profiles/$profile/"
+             (( number=$(egrep "^Name=" "${ini}" | wc -l) ))
+
+cat <<EOF >>"${ini}"
+
+[Profile$number]
+Name=$profile
+IsRelative=1
+Path=Profiles/$profile
+EOF
+            
+         }
+         opts="--new-instance --no-remote $opts"
+     }
+
+     $bin $opts $url >/dev/null 2>&1 &
+}
+
+function update_remount() {
+    local remount="${MOUNT}/.remount.tab"
+    local _remount="${TMPDIR}remount.$$"
+    mode="$1" ; entry="$2 $3 $4"
+    grep -v "$entry" "$remount" > "$_remount"
+    [ "$mode" == "add" ] && echo "$entry" >> "$_remount"
+    mv "$_remount" "$remount"
+}
+
 # agorum mount [agorum/dms] [roi] [agorum] 
 function cifs-mount() {
 
@@ -520,34 +574,42 @@ function cifs-mount() {
     local password=${3:-$PASSWORD}
     set -- ${dms//\// }
     local host="$1"
-    dms="$2"
-    local mount="${MOUNT}/${username}/${host}/${dms}"
-    local link="${username}@$host [$dms]"
+    local _shares=${2:-"dms private"}
+    local ret=1
+    # use host ip address to bypass slow netbios name resolution for docker container
+    local host_ip=$(resolve $host)
+    [ "$host_ip" ] || { echo "cannot resolve host [$host]" 1>&2 ; return $ret; }
+    for dms in $_shares
+    do
+        local mount="${MOUNT}/${username}/${host}/${dms}"
+        local link="${username}@$host [$dms]"
+        local _mount="$host/$dms $username $password"
 
-    [ -d "$mount" ] || mkdir -p "$mount"
-    mount | grep -q "$mount" || {
-        [ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
-        mount -t smbfs cifs://${username}:${password}@${host}/${dms} "$mount"
-        ( let counter=0
-          while [ $counter -lt 60 ]
-          do
-              sleep 1 ; ((counter++))
-            [ -d "$mount" ] && {
+        [ -d "$mount" ] || mkdir -p "$mount"
+        echo -n "mount ${username}@${host}/${dms}"
+        mount | grep -q "$mount" || {
+
+            echo -n "..."
+            
+            [ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
+
+            mount_smbfs -s cifs://${username}:${password}@${host_ip}/${dms} $mount && {
+                
+                update_remount add $_mount
                 mkalias $mount $LINKROOT "$link"
-                break    
             }
-          done
-        ) &
-        # [ -f "${LINKROOT}/${link}" ] || { sleep 3 ; mkalias $mount $LINKROOT "$link"; }
-    }
-    # check and set error level
-    mount | grep -q "$mount"
+        }
+        # check and set error level
+        mount | grep -q "$mount" && { echo " OK" ; ret=0 ; } 
+    done
+    return $ret
 }
 
 function cifs-umount() {
 
     local dms=${1:-$DMS}
     local username=${2:-$USERNAME}
+    local _mount="$dms $username"
     # local password=${3:-$PASSWORD}
     set -- ${dms//\// }
     local host="$1"
@@ -563,9 +625,10 @@ function cifs-umount() {
     }
     mount | grep -q "$mount" || {
         [ -f "${LINKROOT}/${link}" ] && rm "${LINKROOT}/${link}"
+        update_remount delete $_mount
     }
     # return $ret
-    mount | grep -q -v "$mount"
+    mount | grep -q "$mount"
 }
 
 function dm-backup() { 
@@ -628,21 +691,58 @@ case "$CMD" in
 help|--help|-h|-\?|\?) help agorum
                 ;;
 
-mount)            help mount cifs-mount "$@"
+mount)          [ "$1" ] && help mount cifs-mount "$@"
+                [ "$1" ] || mount | awk '/\/\// { usr=substr($1,3,3); dms=substr($1,7);print dms, usr}' | while read ln
+                do
+                    set -- $ln ; dms="$1" ; usr="$2"
+                    set -- ${dms//\// } ; host=$(reverse "$1") ; share="$2"
+                    echo "$host/$share $usr"
+                done
                 ;;
 
-umount)            help umount cifs-umount "$@"
+umount)         help umount cifs-umount "$@"
                 ;;
 
-vm)                # start/stop agorum vms
+vm)             # start/stop agorum vms
                 SUBCMD="$1" ; shift
                 case "$SUBCMD" in
-                start)    # startup virtual machine
+                start)  # startup virtual machine
                         help vm vm-start "$@"
                         checkopts "as" "VM_START_OPT" "$@" ; shift $?
                         ;;
-                stop)    help vm vm-stop "$@"  ;;
-                *)        help vm -- --help     ;;
+                stop)   help vm vm-stop "$@"  ;;
+
+                startup) # agorum [cfg] startup vm host share project workdir
+
+                    help startup -- "$@"
+
+                    vm-start
+                    ssh root@$HOST "agorum start"
+                    cifs-mount
+
+                    private=$(mount | grep $MOUNT | sed 's/.* on \(.*\) (.*/\1/')
+                    [ -d "$private/$PROJECT" ] && [ -d "$WORKDIR" ] && {
+                        cd "$WORKDIR"    
+                        ln -sf "$private/$PROJECT" .
+                        export GIT_DIR="$(pwd)/.git"
+                        $IDECMD -n cdev.core 
+                    } 
+                    ;;
+
+                shutdown) # agorum [cfg] shutdown vm host share project workdir
+
+                    help shutdown -- "$@"
+
+                    cd "$WORKDIR" && {
+                        project=$(basename $PROJECT)
+                        [ -L "$project" ] && unlink "$project"
+                    }
+                    cifs-umount 
+                    vm-stop
+                    ;;
+
+
+                *)      help vm -- --help     ;;
                 esac
                 ;;
 
@@ -708,34 +808,7 @@ develop)        # agorum [cfg] develop
                 $IDECMD -n "$DEVROOT"
                 ;;
 
-startup)        # agorum [cfg] startup vm host share project workdir 
-                help startup -- "$@"
-
-                vm-start
-                ssh root@$HOST "agorum start"
-                cifs-mount
-
-                private=$(mount | grep $MOUNT | sed 's/.* on \(.*\) (.*/\1/')
-                [ -d "$private/$PROJECT" ] && [ -d "$WORKDIR" ] && {
-                    cd "$WORKDIR"    
-                    ln -sf "$private/$PROJECT" .
-                    export GIT_DIR="$(pwd)/.git"
-                    $IDECMD -n cdev.core 
-                } 
-                ;;
-
-shutdown)        # agorum [cfg] shutdown vm host share project workdir
-                help shutdown -- "$@"
-
-                cd "$WORKDIR" && {
-                    project=$(basename $PROJECT)
-                    [ -L "$project" ] && unlink "$project"
-                }
-                cifs-umount 
-                vm-stop
-                ;;
-
-status)            # agorum [cfg] status
+status)         # agorum [cfg] status
                 # TODO: complete rework required: docker, webdav, project, ...
                 _VMX=$("$VMRUN" list | grep $VM)
                 [ "$_VMX" ] && _MOUNT=$(mount | grep $DMS)
@@ -757,7 +830,7 @@ current environment
 EOF
 ;;
 
-cd)                # open terminal at spezified directory
+cd)             # open terminal at spezified directory
                 _MOUNT=$(mountpoint $HOST private)
                 help cd -- "$@"
 
@@ -783,7 +856,7 @@ query)          help query -- "$@"
                 # xargs -0 -I{} sh -c "echo '{}' && jq $1 '{}' | egrep -v '({|})' | sed 's/\"//g' ; echo"
                 ;;
 
-find)            help find -- "$@"
+find)           help find -- "$@"
                 find . -type f \( -iname "*.js" ! -iname ".*" \) -print0 | \
                 xargs -0 -I{} $SCRIPT _find "{}" "$1"
                 ;;
@@ -963,7 +1036,104 @@ purge)          # remove container data
                 echo $_opt
                 echo $_container
                 echo "$_state ($_err)"
+                ;;
 
-                ;;         
+remount)        # remount shares from ${MOUNT}/.remount.tab after MacOS sleep
+                # help remount -- "@"
+                [ -f "${MOUNT}/.remount.tab" ] && {
+                    cat "${MOUNT}/.remount.tab" | while read _line
+                    do
+                        cifs-mount $_line
+                    done
+                }
+                _mounts=$(mount | grep "$HOME/Develop/agorum/mnt" | wc -l)
+                _remounts=$(cat "${MOUNT}/.remount.tab" | wc -l)
+                _links=$(ls $HOME/Desktop/*@*\[* | wc -l)
+                # echo "$_mounts $_remounts $_links"
+                [ $_remounts -ne $_mounts ] && {
+                    echo "WARNING: different number of entries in mounts and remounts!"
+                    echo "mounts:   $_mounts"
+                    echo "remounts: $_remounts"
+                }
+                ;;
+
+relink)         # restore mounts (with default password) from desktop links
+                # help relink -- "@"
+                ls $HOME/Desktop/*@*\[* | while read ln
+                do
+                    _bn=$(basename "$ln")
+                    set -- $_bn ; _share="$2" ; _share=${_share/[/} ; _share=${_share/]/}
+                    _host=${1##*@} ; _usr=${1%%@*}
+                    cifs-mount $_host/$_share $_usr agorum
+                done
+                ;;
+
+startup)        # agorum [cfg] startup container [usr ...]
+                # help startup -- "@"
+                _container=${1:-agorum} ; shift
+                $SCRIPT start $_container
+                cifs-mount $_container/cdev_roi roi
+                $SCRIPT project $_container/cdev.core
+                $IDECMD $HOME/Develop/agorum/mnt/roi/$_container/cdev_roi
+                #_count=$# ; _opts="--new-window"
+                while [ "$1" ]
+                do
+                    _usr="$1" ; shift
+                    # [ $_count -gt 1 ] && _opts="-P "$_usr" --new-instance --no-remote --new-window"
+                    cifs-mount $_container/private "$_usr"
+                    cifs-mount $_container/dms "$_usr"
+                    [ "$_container" == "acdemo" ] && cifs-mount $_container/archive "$_usr"
+                    firefox-startup "$_usr" "$_container" 
+                    # /Applications/Firefox.app/Contents/MacOS/firefox $_opts http://$_container.office.local >/dev/null 2>&1 &
+                done
+                ;;
+
+shutdown)       # agorum [cfg] shutdown container
+                # help shutdown -- "@"
+                _container=${1:-agorum} ; shift
+                [ -f "${MOUNT}/.remount.tab" ] && {
+                    egrep "^${_container}/" "${MOUNT}/.remount.tab" | while read _line
+                    do
+                        set -- $_line
+                        cifs-umount "$1" "$2" 
+                    done               
+                }
+                $SCRIPT stop $_container
+                ;;
+
+mirror)         # agorum [cfg] mirror
+                # help shutdown -- "@"
+                open -a /Applications/ApowerMirror.app 
+                open -n /Applications/ApowerMirror.app
+                ;;
+
+nomount)        # agorum [cfg] container [user]
+                # help shutdown -- "@"
+                _container=${1:-agorum} ; shift
+                _user="$1"
+                [ -f "${MOUNT}/.remount.tab" ] && {
+                    egrep "^${_container}/" "${MOUNT}/.remount.tab" | grep -v "cdev_roi" | while read _line
+                    do
+                        _do_umount=true
+                        set -- $_line
+                        [ "$_user" ] && [ "$2" != "$_user" ] && _do_umount= 
+                        [ "$_do_umount" ] && cifs-umount "$1" "$2"  
+                    done               
+                }
+                ;;
+
+firefox)        # agorum [cfg] container [user]
+                # help shutdown -- "@"
+                _container=${1:-agorum} ; shift
+                _user="${1:-roi}"
+                firefox "$_container" "$_user"
+                ;;
+
+*)              echo "Command [$CMD] not found!"
+                ;;
 
 esac
+
+
+# list agorum docker container
+# for container in $($DC ps --format "{{.Names}}" | grep digitec ; $DC ps --format "{{.Names}}" --filter ancestor=agorum)
